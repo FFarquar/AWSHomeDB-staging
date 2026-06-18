@@ -384,14 +384,107 @@
             showSuccessToast("Container deleted successfully.");
             return;
         }
-        
+
         try {
             const cleanId = pk.replace("CONTAINER#", "");
+
+            // Cascade: delete all child items (and their notes, parts, attachments) first
+            try {
+                const itemsRes = await fetch(`${API}/containers/${cleanId}/items`, {
+                    method: "GET",
+                    headers: authHeaders()
+                });
+                if (itemsRes.ok) {
+                    const items = await itemsRes.json();
+                    if (Array.isArray(items)) {
+                        await Promise.all(items.map(async item => {
+                            const itemId = item.itemId;
+
+                            // Delete notes and their attachments
+                            try {
+                                const notesRes = await fetch(
+                                    `${API}/containers/${cleanId}/items/${itemId}/notes`,
+                                    { method: "GET", headers: authHeaders() }
+                                );
+                                if (notesRes.ok) {
+                                    const notes = await notesRes.json();
+                                    if (Array.isArray(notes)) {
+                                        await Promise.all(notes.map(async note => {
+                                            if (Array.isArray(note.attachments)) {
+                                                await Promise.all(note.attachments.map(att =>
+                                                    fetch(`${API}/attachments/delete`, {
+                                                        method: "POST",
+                                                        headers: authHeaders(),
+                                                        body: JSON.stringify({
+                                                            pk: `CONTAINER#${cleanId.toUpperCase()}`,
+                                                            sk: `NOTE#${itemId}#${note.noteId}`,
+                                                            attachmentId: att.attachmentId
+                                                        })
+                                                    }).catch(e => console.warn("Could not delete note attachment:", e))
+                                                ));
+                                            }
+                                            return fetch(
+                                                `${API}/containers/${cleanId}/items/${itemId}/notes/${note.noteId}`,
+                                                { method: "DELETE", headers: authHeaders() }
+                                            );
+                                        }));
+                                    }
+                                }
+                            } catch (noteErr) {
+                                console.warn("Could not cascade delete notes for item:", itemId, noteErr);
+                            }
+
+                            // Delete parts and their attachments
+                            try {
+                                const partsRes = await fetch(
+                                    `${API}/containers/${cleanId}/items/${itemId}/parts`,
+                                    { method: "GET", headers: authHeaders() }
+                                );
+                                if (partsRes.ok) {
+                                    const parts = await partsRes.json();
+                                    if (Array.isArray(parts)) {
+                                        await Promise.all(parts.map(async part => {
+                                            if (Array.isArray(part.attachments)) {
+                                                await Promise.all(part.attachments.map(att =>
+                                                    fetch(`${API}/attachments/delete`, {
+                                                        method: "POST",
+                                                        headers: authHeaders(),
+                                                        body: JSON.stringify({
+                                                            pk: `CONTAINER#${cleanId.toUpperCase()}`,
+                                                            sk: `PART#${itemId}#${part.partId}`,
+                                                            attachmentId: att.attachmentId
+                                                        })
+                                                    }).catch(e => console.warn("Could not delete part attachment:", e))
+                                                ));
+                                            }
+                                            return fetch(
+                                                `${API}/containers/${cleanId}/items/${itemId}/parts/${part.partId}`,
+                                                { method: "DELETE", headers: authHeaders() }
+                                            );
+                                        }));
+                                    }
+                                }
+                            } catch (partErr) {
+                                console.warn("Could not cascade delete parts for item:", itemId, partErr);
+                            }
+
+                            // Delete the item record
+                            return fetch(
+                                `${API}/containers/${cleanId}/items/${itemId}`,
+                                { method: "DELETE", headers: authHeaders() }
+                            ).catch(e => console.warn("Could not delete item:", itemId, e));
+                        }));
+                    }
+                }
+            } catch (itemErr) {
+                console.warn("Could not cascade delete items:", itemErr);
+            }
+
             const response = await fetch(`${API}/containers/${cleanId}`, {
                 method: "DELETE",
                 headers: authHeaders()
             });
-            
+
             if (!response.ok) throw new Error(`Status: ${response.status}`);
             await loadContainers();
             showSuccessToast("Container deleted successfully.");
@@ -996,12 +1089,25 @@
                 if (notesRes.ok) {
                     const notes = await notesRes.json();
                     if (Array.isArray(notes)) {
-                        await Promise.all(notes.map(note =>
-                            fetch(`${API}/containers/${activeShortContainerId}/items/${itemId}/notes/${note.noteId}`, {
+                        await Promise.all(notes.map(async note => {
+                            if (Array.isArray(note.attachments)) {
+                                await Promise.all(note.attachments.map(att =>
+                                    fetch(`${API}/attachments/delete`, {
+                                        method: "POST",
+                                        headers: authHeaders(),
+                                        body: JSON.stringify({
+                                            pk: `CONTAINER#${activeShortContainerId.toUpperCase()}`,
+                                            sk: `NOTE#${itemId}#${note.noteId}`,
+                                            attachmentId: att.attachmentId
+                                        })
+                                    }).catch(e => console.warn("Could not delete note attachment:", e))
+                                ));
+                            }
+                            return fetch(`${API}/containers/${activeShortContainerId}/items/${itemId}/notes/${note.noteId}`, {
                                 method: "DELETE",
                                 headers: authHeaders()
-                            })
-                        ));
+                            });
+                        }));
                     }
                 }
             } catch (noteErr) {
@@ -1690,6 +1796,22 @@ async function finalizeNoteDelete(noteId) {
     }
 
     try {
+        // Remove note attachments from S3 before deleting the note record
+        const note = currentItemNotes.find(n => n.noteId === noteId);
+        if (note && Array.isArray(note.attachments) && note.attachments.length > 0) {
+            await Promise.all(note.attachments.map(att =>
+                fetch(`${API}/attachments/delete`, {
+                    method: "POST",
+                    headers: authHeaders(),
+                    body: JSON.stringify({
+                        pk: `CONTAINER#${activeShortContainerId.toUpperCase()}`,
+                        sk: `NOTE#${editingItemId}#${noteId}`,
+                        attachmentId: att.attachmentId
+                    })
+                }).catch(e => console.warn("Could not delete note attachment:", e))
+            ));
+        }
+
         const res = await fetch(
             `${API}/containers/${activeShortContainerId}/items/${editingItemId}/notes/${noteId}`,
             { method: "DELETE", headers: authHeaders() }
@@ -2020,6 +2142,22 @@ async function finalizePartDelete(partId) {
     }
 
     try {
+        // Remove part attachments from S3 before deleting the part record
+        const part = currentItemParts.find(p => p.partId === partId);
+        if (part && Array.isArray(part.attachments) && part.attachments.length > 0) {
+            await Promise.all(part.attachments.map(att =>
+                fetch(`${API}/attachments/delete`, {
+                    method: "POST",
+                    headers: authHeaders(),
+                    body: JSON.stringify({
+                        pk: `CONTAINER#${activeShortContainerId.toUpperCase()}`,
+                        sk: `PART#${editingItemId}#${partId}`,
+                        attachmentId: att.attachmentId
+                    })
+                }).catch(e => console.warn("Could not delete part attachment:", e))
+            ));
+        }
+
         const res = await fetch(
             `${API}/containers/${activeShortContainerId}/items/${editingItemId}/parts/${partId}`,
             { method: "DELETE", headers: authHeaders() }

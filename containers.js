@@ -232,7 +232,6 @@
 
         document.getElementById("modalTitle").innerText = "Edit Container";
         document.getElementById("name").value = item.name || "";
-        document.getElementById("photoLocation").value = item.photoLocation || "";
         document.getElementById("purchaseDate").value = item.purchaseDate || "";
         document.getElementById("warrantyFinishDate").value = item.warrantyFinishDate || "";
         document.getElementById("extendedWarrantyFinishDate").value = item.extendedWarrantyFinishDate || "";
@@ -256,7 +255,6 @@
         if (!isAdmin) { showInfoPopup("Unauthorized action."); return; }
 
         const name = document.getElementById("name").value.trim();
-        const photoLocation = document.getElementById("photoLocation").value.trim();
         const purchaseDate = document.getElementById("purchaseDate").value;
         const warrantyFinishDate = document.getElementById("warrantyFinishDate").value;
         const extendedWarrantyFinishDate = document.getElementById("extendedWarrantyFinishDate").value;
@@ -273,7 +271,6 @@
             SK: "METADATA",
             containerId: editingId ? editingId.replace("CONTAINER#", "") : id,
             name,
-            photoLocation,
             purchaseDate,
             warrantyFinishDate,
             extendedWarrantyFinishDate: extendedWarrantyFinishDate || null,
@@ -303,7 +300,7 @@
             if (editingId) {
                 const cleanId = editingId.replace("CONTAINER#", "");
                 const update = {
-                    name, itemName: name, photoLocation, purchaseDate,
+                    name, itemName: name, purchaseDate,
                     warrantyFinishDate, extendedWarrantyFinishDate: extendedWarrantyFinishDate || null,
                     purchasePrice, warrantyExpiryDate: finalWarranty
                 };
@@ -593,10 +590,38 @@
         document.getElementById("itemModal").style.display = "flex";
     }
 
-    function openItemEdit(itemId) {
-        if (!canManageItems) return; 
+    async function openItemEdit(itemId) {
+        if (!canManageItems) return;
         editingItemId = itemId;
-        const target = childItems.find(i => i.itemId === itemId);
+
+        let target = childItems.find(i => i.itemId === itemId);
+
+        if (!window.APP_CONFIG?.USE_MOCK) {
+            try {
+                const res = await fetch(`${API}/containers/${activeShortContainerId}/items/${itemId}`, {
+                    method: "GET",
+                    headers: authHeaders()
+                });
+                if (res.ok) {
+                    const fresh = await res.json();
+                    let rawAtts = fresh.itemAttachments || fresh.attachments;
+                    if (typeof rawAtts === "string") {
+                        try { rawAtts = JSON.parse(rawAtts); } catch (e) { rawAtts = []; }
+                    }
+                    fresh.attachments = Array.isArray(rawAtts) ? rawAtts.map(a => ({
+                        ...a,
+                        label: a.filename || a.label || "File Attachment",
+                        s3Url: a.fileUrl || a.s3Url || ""
+                    })) : [];
+                    const idx = childItems.findIndex(i => i.itemId === itemId);
+                    if (idx !== -1) childItems[idx] = { ...childItems[idx], ...fresh };
+                    target = childItems[idx] ?? fresh;
+                }
+            } catch (err) {
+                console.warn("Could not refresh item data from server:", err);
+            }
+        }
+
         document.getElementById("itemModalTitle").innerText = "Modify Item Properties";
 
         document.getElementById("itemName").value = target.itemName || "";
@@ -606,13 +631,12 @@
         document.getElementById("itemPurchaseDate").value = target.purchaseDate || "";
         document.getElementById("itemWarrantyExpiryDate").value = target.warrantyExpiryDate === "1970-01-01" ? "" : target.warrantyExpiryDate;
         document.getElementById("itemPhysicalLocation").value = target.physicalPaperStorageLocation || "";
-        
-        // ✨ FIX: Handle both stringified or raw native list attributes on edit load
+
         let rawAtts = target.attachments;
         if (typeof rawAtts === "string") {
             try { rawAtts = JSON.parse(rawAtts); } catch (e) { rawAtts = []; }
         }
-        
+
         currentItemAttachments = Array.isArray(rawAtts) ? [...rawAtts] : [];
 
         renderAttachmentCards();
@@ -1072,7 +1096,7 @@
 
     // Existing utility functions remain below intact
     function clearForm() {
-        ["name","photoLocation","purchaseDate","warrantyFinishDate","extendedWarrantyFinishDate","purchasePrice"]
+        ["name","purchaseDate","warrantyFinishDate","extendedWarrantyFinishDate","purchasePrice"]
         .forEach(id => document.getElementById(id).value = "");
         document.getElementById("editHint").innerText = "";
     }

@@ -142,7 +142,7 @@
             <div id="attachmentsSection" style="background:#f2f3f5; border-radius:8px; padding:14px; margin-top:15px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="toggleCollectionSection('attachmentCardsList', 'attachmentsToggle', 'attachmentsAddBtn')">
-                        <label style="cursor:pointer;"><strong>Attachments</strong></label>
+                        <label style="cursor:pointer;"><strong>Attachments</strong> <span id="attachmentsCount" style="font-weight:normal; color:#555;"></span></label>
                         <span id="attachmentsToggle" style="font-size:18px; user-select:none;">▼</span>
                     </div>
                     <button id="attachmentsAddBtn" type="button" class="btn-add-collection" onclick="openAddAttachment()" style="display:none; padding:0 10px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">+ Add Attachment</button>
@@ -154,7 +154,7 @@
             <div id="notesSection" style="display:none; background:#f2f3f5; border-radius:8px; padding:14px; margin-top:15px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="toggleCollectionSection('notesList', 'notesToggle', 'notesAddBtn')">
-                        <label style="cursor:pointer;"><strong>Notes</strong></label>
+                        <label style="cursor:pointer;"><strong>Notes</strong> <span id="notesCount" style="font-weight:normal; color:#555;"></span></label>
                         <span id="notesToggle" style="font-size:18px; user-select:none;">▼</span>
                     </div>
                     <button id="notesAddBtn" type="button" class="btn-add-collection" onclick="openAddNote()" style="display:none; padding:0 10px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">+ Add Note</button>
@@ -166,7 +166,7 @@
             <div id="partsSection" style="display:none; background:#f2f3f5; border-radius:8px; padding:14px; margin-top:15px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="toggleCollectionSection('partsList', 'partsToggle', 'partsAddBtn')">
-                        <label style="cursor:pointer;"><strong>Parts</strong></label>
+                        <label style="cursor:pointer;"><strong>Parts</strong> <span id="partsCount" style="font-weight:normal; color:#555;"></span></label>
                         <span id="partsToggle" style="font-size:18px; user-select:none;">▼</span>
                     </div>
                     <button id="partsAddBtn" type="button" class="btn-add-collection" onclick="openAddPart()" style="display:none; padding:0 10px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">+ Add Part</button>

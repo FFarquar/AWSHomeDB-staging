@@ -93,7 +93,7 @@
 
         if (isOpen('noteModal'))          { closeNoteForm();             history.pushState({ view: 'app' }, ''); return; }
         if (isOpen('partModal'))          { closePartForm();             history.pushState({ view: 'app' }, ''); return; }
-        if (isOpen('attachmentModal'))    { closeAttachmentForm();       history.pushState({ view: 'app' }, ''); return; }
+        if (isOpen('attachmentModal'))    { if (window._uploadInProgress) { history.pushState({ view: 'app' }, ''); return; } closeAttachmentForm(); history.pushState({ view: 'app' }, ''); return; }
         if (isOpen('deleteConfirmModal')) { closeDeleteModal();          history.pushState({ view: 'app' }, ''); return; }
         if (isOpen('itemModal'))          { closeItemModal();            history.pushState({ view: 'app' }, ''); return; }
         if (isOpen('modal'))              { closeModal();                history.pushState({ view: 'app' }, ''); return; }
@@ -816,6 +816,8 @@
     function renderAttachmentCards() {
         const list = document.getElementById("attachmentCardsList");
         if (!list) return;
+        const countEl = document.getElementById("attachmentsCount");
+        if (countEl) countEl.textContent = currentItemAttachments && currentItemAttachments.length > 0 ? `(${currentItemAttachments.length})` : "";
         if (!currentItemAttachments || currentItemAttachments.length === 0) {
             list.innerHTML = `<p style="color:#888; font-style:italic; font-size:13px; margin:0 0 6px 0;">No attachments yet.</p>`;
             return;
@@ -1240,6 +1242,7 @@ function setAttachmentUploadLock(locked) {
         btn.style.opacity = locked ? "0.45" : "";
         btn.style.cursor = locked ? "not-allowed" : "";
     });
+    window._uploadInProgress = locked;
     if (locked) {
         window._uploadBeforeUnload = e => { e.preventDefault(); e.returnValue = ""; };
         window.addEventListener("beforeunload", window._uploadBeforeUnload);
@@ -1421,6 +1424,9 @@ async function loadNotes() {
 function renderNotesSection() {
     const list = document.getElementById("notesList");
     if (!list) return;
+
+    const countEl = document.getElementById("notesCount");
+    if (countEl) countEl.textContent = currentItemNotes.length > 0 ? `(${currentItemNotes.length})` : "";
 
     if (currentItemNotes.length === 0) {
         list.innerHTML = `<p style="color:#888; font-style:italic; font-size:13px; margin:0 0 6px 0;">No notes recorded yet.</p>`;
@@ -1734,6 +1740,9 @@ async function loadParts() {
 function renderPartsSection() {
     const list = document.getElementById("partsList");
     if (!list) return;
+
+    const countEl = document.getElementById("partsCount");
+    if (countEl) countEl.textContent = currentItemParts.length > 0 ? `(${currentItemParts.length})` : "";
 
     if (currentItemParts.length === 0) {
         list.innerHTML = `<p style="color:#888; font-style:italic; font-size:13px; margin:0 0 6px 0;">No parts recorded yet.</p>`;

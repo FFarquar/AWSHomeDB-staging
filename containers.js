@@ -800,8 +800,9 @@
         editingAttachmentIdx = null;
         document.getElementById("attachmentFormTitle").innerText = "Add Attachment";
         document.getElementById("itemFilePicker").value = "";
+        document.getElementById("attachmentDisplayName").value = "";
         document.getElementById("uploadProgressBar").style.display = "none";
-        document.getElementById("attachmentFilePickerRow").style.display = "flex";
+        document.getElementById("attachmentFilePickerRow").style.display = "block";
         document.getElementById("attachmentCurrentFile").style.display = "none";
         const btnDel = document.getElementById("btnDeleteAttachmentInForm");
         if (btnDel) btnDel.style.display = "none";
@@ -1190,9 +1191,12 @@ async function handleAttachmentUpload() {
     if (!fileInput || !fileInput.files.length) {
         showInfoPopup("Please select a file first."); return;
     }
-    
+
     const file = fileInput.files[0];
+    const displayNameInput = document.getElementById("attachmentDisplayName");
+    const displayName = displayNameInput?.value.trim() || file.name;
     fileInput.value = ""; // clear early so closeAttachmentForm won't re-trigger upload
+    if (displayNameInput) displayNameInput.value = "";
 
     if (progressStatus) {
         progressStatus.style.display = "block";
@@ -1203,16 +1207,16 @@ async function handleAttachmentUpload() {
         const localMockUrl = URL.createObjectURL(file);
         currentItemAttachments.push({
             attachmentId: "ATT#" + Date.now(),
-            label: file.name,
+            label: displayName,
             s3Url: localMockUrl,
-            name: file.name,
+            name: displayName,
             url: localMockUrl
         });
         renderAttachmentCards();
         closeAttachmentForm();
         if (progressStatus) progressStatus.style.display = "none";
         fileInput.value = "";
-        showSuccessToast(`Staged local mock for "${file.name}"`);
+        showSuccessToast(`Staged local mock for "${displayName}"`);
         return;
     }
 
@@ -1222,7 +1226,9 @@ async function handleAttachmentUpload() {
 
         if (progressStatus) progressStatus.innerText = "⏳ Contacting AWS S3 Storage Gateway...";
 
-        const presignPath = `${API}/attachments/presign?filename=${encodeURIComponent(fileToUpload.name)}&contentType=${encodeURIComponent(fileToUpload.type)}`;
+        const _itemExt = fileToUpload.name.includes('.') ? '.' + fileToUpload.name.split('.').pop() : '';
+        const s3Filename = (_itemExt && !displayName.toLowerCase().endsWith(_itemExt.toLowerCase())) ? displayName + _itemExt : displayName;
+        const presignPath = `${API}/attachments/presign?filename=${encodeURIComponent(s3Filename)}&contentType=${encodeURIComponent(fileToUpload.type)}`;
         const res = await fetch(presignPath, { headers: authHeaders() });
         if (!res.ok) throw new Error("Failed getting secure token path.");
 
@@ -1243,18 +1249,18 @@ async function handleAttachmentUpload() {
 
             const stagedAttachment = {
                 attachmentId: `att-${Date.now()}`,
-                filename: fileToUpload.name,
+                filename: displayName,
                 fileUrl: fileUrl,
-                label: fileToUpload.name,
+                label: displayName,
                 s3Url: fileUrl,
-                name: fileToUpload.name,
+                name: displayName,
                 url: fileUrl
             };
 
             currentItemAttachments.push(stagedAttachment);
             renderAttachmentCards();
             closeAttachmentForm();
-            showSuccessToast(`Staged "${file.name}"! Will save with item.`);
+            showSuccessToast(`Staged "${displayName}"! Will save with item.`);
 
         } else {
             // 💡 PATHWAY B: EXISTING ITEM
@@ -1266,7 +1272,7 @@ async function handleAttachmentUpload() {
             const dbPayload = {
                 pk: `CONTAINER#${cleanContainerId.toUpperCase()}`,
                 sk: `ITEM#${cleanItemId}`,
-                filename: fileToUpload.name,
+                filename: displayName,
                 fileUrl: fileUrl
             };
 
@@ -1289,7 +1295,7 @@ async function handleAttachmentUpload() {
 
             renderAttachmentCards();
             closeAttachmentForm();
-            showSuccessToast(`Uploaded ${file.name} successfully!`);
+            showSuccessToast(`Uploaded "${displayName}" successfully!`);
         }
 
     } catch (err) {
@@ -1444,21 +1450,24 @@ async function handleNoteAttachmentUpload() {
     }
 
     const file = fileInput.files[0];
+    const noteDisplayNameInput = document.getElementById("noteAttachmentDisplayName");
+    const noteDisplayName = noteDisplayNameInput?.value.trim() || file.name;
+    if (noteDisplayNameInput) noteDisplayNameInput.value = "";
     if (progressStatus) { progressStatus.style.display = "block"; progressStatus.innerText = "⏳ Processing..."; }
 
     if (window.APP_CONFIG?.USE_MOCK) {
         const localUrl = URL.createObjectURL(file);
         currentNoteAttachments.push({
             attachmentId: "ATT#" + Date.now(),
-            filename: file.name,
+            filename: noteDisplayName,
             fileUrl: localUrl,
-            label: file.name,
+            label: noteDisplayName,
             s3Url: localUrl
         });
         renderNoteAttachmentList();
         if (progressStatus) progressStatus.style.display = "none";
         fileInput.value = "";
-        showSuccessToast(`Staged "${file.name}" for note.`);
+        showSuccessToast(`Staged "${noteDisplayName}" for note.`);
         return true;
     }
 
@@ -1467,7 +1476,9 @@ async function handleNoteAttachmentUpload() {
         if (!fileToUpload) return false;
 
         if (progressStatus) progressStatus.innerText = "⏳ Contacting AWS S3 Storage Gateway...";
-        const presignPath = `${API}/attachments/presign?filename=${encodeURIComponent(fileToUpload.name)}&contentType=${encodeURIComponent(fileToUpload.type)}`;
+        const _noteExt = fileToUpload.name.includes('.') ? '.' + fileToUpload.name.split('.').pop() : '';
+        const noteS3Filename = (_noteExt && !noteDisplayName.toLowerCase().endsWith(_noteExt.toLowerCase())) ? noteDisplayName + _noteExt : noteDisplayName;
+        const presignPath = `${API}/attachments/presign?filename=${encodeURIComponent(noteS3Filename)}&contentType=${encodeURIComponent(fileToUpload.type)}`;
         const res = await fetch(presignPath, { headers: authHeaders() });
         if (!res.ok) throw new Error("Failed to get presigned URL.");
         const { uploadUrl, fileUrl } = await res.json();
@@ -1480,13 +1491,13 @@ async function handleNoteAttachmentUpload() {
             // New note: stage locally until note is saved
             currentNoteAttachments.push({
                 attachmentId: `att-${Date.now()}`,
-                filename: fileToUpload.name,
+                filename: noteDisplayName,
                 fileUrl,
-                label: fileToUpload.name,
+                label: noteDisplayName,
                 s3Url: fileUrl
             });
             renderNoteAttachmentList();
-            showSuccessToast(`Staged "${file.name}"! Will save with note.`);
+            showSuccessToast(`Staged "${noteDisplayName}"! Will save with note.`);
         } else {
             // Existing note: persist attachment to DB immediately
             if (progressStatus) progressStatus.innerText = "⏳ Logging metadata to database...";
@@ -1494,7 +1505,7 @@ async function handleNoteAttachmentUpload() {
             const dbPayload = {
                 pk: `CONTAINER#${cleanContainerId.toUpperCase()}`,
                 sk: `NOTE#${editingItemId}#${editingNoteId}`,
-                filename: fileToUpload.name,
+                filename: noteDisplayName,
                 fileUrl
             };
             const dbRes = await fetch(`${API}/attachments`, {
@@ -1510,7 +1521,7 @@ async function handleNoteAttachmentUpload() {
                 s3Url: a.fileUrl || a.s3Url
             }));
             renderNoteAttachmentList();
-            showSuccessToast(`Uploaded "${file.name}" to note!`);
+            showSuccessToast(`Uploaded "${noteDisplayName}" to note!`);
         }
         return true;
     } catch (err) {
@@ -1761,21 +1772,24 @@ async function handlePartAttachmentUpload() {
     }
 
     const file = fileInput.files[0];
+    const partDisplayNameInput = document.getElementById("partAttachmentDisplayName");
+    const partDisplayName = partDisplayNameInput?.value.trim() || file.name;
+    if (partDisplayNameInput) partDisplayNameInput.value = "";
     if (progressStatus) { progressStatus.style.display = "block"; progressStatus.innerText = "⏳ Processing..."; }
 
     if (window.APP_CONFIG?.USE_MOCK) {
         const localUrl = URL.createObjectURL(file);
         currentPartAttachments.push({
             attachmentId: "ATT#" + Date.now(),
-            filename: file.name,
+            filename: partDisplayName,
             fileUrl: localUrl,
-            label: file.name,
+            label: partDisplayName,
             s3Url: localUrl
         });
         renderPartAttachmentList();
         if (progressStatus) progressStatus.style.display = "none";
         fileInput.value = "";
-        showSuccessToast(`Staged "${file.name}" for part.`);
+        showSuccessToast(`Staged "${partDisplayName}" for part.`);
         return true;
     }
 
@@ -1784,7 +1798,9 @@ async function handlePartAttachmentUpload() {
         if (!fileToUpload) return false;
 
         if (progressStatus) progressStatus.innerText = "⏳ Contacting AWS S3 Storage Gateway...";
-        const presignPath = `${API}/attachments/presign?filename=${encodeURIComponent(fileToUpload.name)}&contentType=${encodeURIComponent(fileToUpload.type)}`;
+        const _partExt = fileToUpload.name.includes('.') ? '.' + fileToUpload.name.split('.').pop() : '';
+        const partS3Filename = (_partExt && !partDisplayName.toLowerCase().endsWith(_partExt.toLowerCase())) ? partDisplayName + _partExt : partDisplayName;
+        const presignPath = `${API}/attachments/presign?filename=${encodeURIComponent(partS3Filename)}&contentType=${encodeURIComponent(fileToUpload.type)}`;
         const res = await fetch(presignPath, { headers: authHeaders() });
         if (!res.ok) throw new Error("Failed to get presigned URL.");
         const { uploadUrl, fileUrl } = await res.json();
@@ -1797,13 +1813,13 @@ async function handlePartAttachmentUpload() {
             // New part: stage locally until part is saved
             currentPartAttachments.push({
                 attachmentId: `att-${Date.now()}`,
-                filename: fileToUpload.name,
+                filename: partDisplayName,
                 fileUrl,
-                label: fileToUpload.name,
+                label: partDisplayName,
                 s3Url: fileUrl
             });
             renderPartAttachmentList();
-            showSuccessToast(`Staged "${file.name}"! Will save with part.`);
+            showSuccessToast(`Staged "${partDisplayName}"! Will save with part.`);
         } else {
             // Existing part: persist attachment to DB immediately
             if (progressStatus) progressStatus.innerText = "⏳ Logging metadata to database...";
@@ -1811,7 +1827,7 @@ async function handlePartAttachmentUpload() {
             const dbPayload = {
                 pk: `CONTAINER#${cleanContainerId.toUpperCase()}`,
                 sk: `PART#${editingItemId}#${editingPartId}`,
-                filename: fileToUpload.name,
+                filename: partDisplayName,
                 fileUrl
             };
             const dbRes = await fetch(`${API}/attachments`, {
@@ -1827,7 +1843,7 @@ async function handlePartAttachmentUpload() {
                 s3Url: a.fileUrl || a.s3Url
             }));
             renderPartAttachmentList();
-            showSuccessToast(`Uploaded "${file.name}" to part!`);
+            showSuccessToast(`Uploaded "${partDisplayName}" to part!`);
         }
         return true;
     } catch (err) {

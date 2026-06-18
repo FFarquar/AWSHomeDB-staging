@@ -786,6 +786,16 @@
         loadNotes();
         loadParts();
 
+        document.getElementById("attachmentCardsList").style.display = "none";
+        document.getElementById("attachmentsToggle").textContent = "▼";
+        document.getElementById("attachmentsAddBtn").style.display = "none";
+        document.getElementById("notesList").style.display = "none";
+        document.getElementById("notesToggle").textContent = "▼";
+        document.getElementById("notesAddBtn").style.display = "none";
+        document.getElementById("partsList").style.display = "none";
+        document.getElementById("partsToggle").textContent = "▼";
+        document.getElementById("partsAddBtn").style.display = "none";
+
         document.getElementById("itemModal").style.display = "flex";
     }
 

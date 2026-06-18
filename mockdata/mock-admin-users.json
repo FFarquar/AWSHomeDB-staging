@@ -1,0 +1,17 @@
+[
+  {
+    "loginID": "Dean_P",
+    "role": "ADMIN",
+    "active": true
+  },
+  {
+    "loginID": "Jenny_P",
+    "role": "USER",
+    "active": true
+  },
+  {
+    "loginID": "Guest",
+    "role": "GUEST",
+    "active": true
+  }
+]

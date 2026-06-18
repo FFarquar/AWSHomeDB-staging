@@ -1,0 +1,38 @@
+[
+  {
+    "PK": "CONTAINER#CONTAINER2",
+    "SK": "NOTE#ITEM1#NOTE1",
+    "entityType": "NOTE",
+    "containerId": "CONTAINER2",
+    "itemId": "ITEM1",
+    "noteId": "NOTE1",
+    "description": "Initial inspection completed. All tyre pressures set to 32 PSI. No visible damage.",
+    "date": "2026-06-06",
+    "attachments": [],
+    "createdDate": "2026-06-06"
+  },
+  {
+    "PK": "CONTAINER#CONTAINER2",
+    "SK": "NOTE#ITEM1#NOTE2",
+    "entityType": "NOTE",
+    "containerId": "CONTAINER2",
+    "itemId": "ITEM1",
+    "noteId": "NOTE2",
+    "description": "Warranty claim lodged with Bridgestone for defective tread on rear left tyre. Reference #BT-2026-4471.",
+    "date": "2026-06-12",
+    "attachments": [],
+    "createdDate": "2026-06-12"
+  },
+  {
+    "PK": "CONTAINER#CONTAINER2",
+    "SK": "NOTE#ITEM2#NOTE3",
+    "entityType": "NOTE",
+    "containerId": "CONTAINER2",
+    "itemId": "ITEM2",
+    "noteId": "NOTE3",
+    "description": "Battery installed and tested. CCA reading 720A against 700A rated. Terminal connectors torqued to spec.",
+    "date": "2026-06-12",
+    "attachments": [],
+    "createdDate": "2026-06-12"
+  }
+]

@@ -1,0 +1,74 @@
+[
+ 
+ {
+    "PK": "CONTAINER#CONTAINER2", 
+    "SK": "ITEM#ITEM1",            
+    "entityType": "ITEM",
+
+    "containerId": "CONTAINER2",
+    "itemId": "ITEM1",
+    
+
+    "itemName": "3 x Bridgestone REE005A tyres",
+    "category": "Automotive",
+    "purchasedFrom": "Tubbies Tyrepower Kirrawee",
+    "warrantyExpiryDate": "2028-06-05",
+
+
+    "purchaseDate": "2026-06-05",
+    "purchasePrice": 1100,
+    "physicalPaperStorageLocation": "Study filing cabinet folder",
+    
+
+    "attachments": [], 
+    "createdDate": "2026-06-12"
+  },
+ {
+    "PK": "CONTAINER#CONTAINER2", 
+    "SK": "ITEM#ITEM2",            
+    "entityType": "ITEM",
+
+    "containerId": "CONTAINER2",
+    "itemId": "ITEM2",
+    
+
+    "itemName": "New battery",
+    "category": "Automotive",
+    "purchasedFrom": "Coda batteries",
+    "warrantyExpiryDate": "2029-06-12",
+
+
+    "purchaseDate": "2026-06-05",
+    "purchasePrice": 1100,
+    "physicalPaperStorageLocation": "Study filing cabinet folder",
+    
+
+    "attachments": [], 
+    "createdDate": "2026-06-12"
+  } ,
+ {
+    "PK": "CONTAINER#CONTAINER3", 
+    "SK": "ITEM#ITEM3",            
+    "entityType": "ITEM",
+
+    "containerId": "CONTAINER3",
+    "itemId": "ITEM3",
+    
+
+    "itemName": "4 New tyres",
+    "category": "Automotive",
+    "purchasedFrom": "Jax Sutherland",
+    "warrantyExpiryDate": "2028-06-01",
+
+
+    "purchaseDate": "2028-06-01",
+    "purchasePrice": 1000,
+    "physicalPaperStorageLocation": "Study filing cabinet folder",
+    
+
+    "attachments": [], 
+    "createdDate": "2026-06-12"
+  }  
+  
+]
+

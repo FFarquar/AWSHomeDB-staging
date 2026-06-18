@@ -73,12 +73,8 @@
             })
             .catch(() => {});
 
-        // 5. Display environment name in header title
+        // 5. Display environment badge in header
         const env = window.APP_CONFIG?.ENVIRONMENT;
-        if (env) {
-            const title = document.getElementById("headerTitle");
-            if (title) title.textContent = `AWS Home DB - Dashboard (${env})`;
-        }
 
         loadContainers();
         loadCategories();

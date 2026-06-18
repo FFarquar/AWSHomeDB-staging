@@ -1537,6 +1537,11 @@ async function loadNotes() {
     renderNotesSection();
 }
 
+function syncNoteCountCell() {
+    const cell = document.querySelector(`td[data-note-count="${editingItemId}"]`);
+    if (cell) cell.textContent = currentItemNotes.length;
+}
+
 function renderNotesSection() {
     const list = document.getElementById("notesList");
     if (!list) return;
@@ -1764,6 +1769,7 @@ async function saveNote() {
         }
         closeNoteForm();
         renderNotesSection();
+        syncNoteCountCell();
         showSuccessToast("Note saved!");
         return;
     }
@@ -1785,6 +1791,7 @@ async function saveNote() {
 
         closeNoteForm();
         await loadNotes();
+        syncNoteCountCell();
         showSuccessToast("Note saved successfully!");
     } catch (err) {
         alert(`Failed to save note: ${err.message}`);
@@ -1801,6 +1808,7 @@ async function finalizeNoteDelete(noteId) {
     if (window.APP_CONFIG?.USE_MOCK) {
         currentItemNotes = currentItemNotes.filter(n => n.noteId !== noteId);
         renderNotesSection();
+        syncNoteCountCell();
         showSuccessToast("Note deleted.");
         return;
     }
@@ -1828,6 +1836,7 @@ async function finalizeNoteDelete(noteId) {
         );
         if (!res.ok) throw new Error(`Status: ${res.status}`);
         await loadNotes();
+        syncNoteCountCell();
         showSuccessToast("Note deleted successfully.");
     } catch (err) {
         alert(`Failed to delete note: ${err.message}`);
@@ -1867,6 +1876,11 @@ async function loadParts() {
         currentItemParts = [];
     }
     renderPartsSection();
+}
+
+function syncPartCountCell() {
+    const cell = document.querySelector(`td[data-part-count="${editingItemId}"]`);
+    if (cell) cell.textContent = currentItemParts.length;
 }
 
 function renderPartsSection() {
@@ -2110,6 +2124,7 @@ async function savePart() {
         }
         closePartForm();
         renderPartsSection();
+        syncPartCountCell();
         showSuccessToast("Part saved!");
         return;
     }
@@ -2131,6 +2146,7 @@ async function savePart() {
 
         closePartForm();
         await loadParts();
+        syncPartCountCell();
         showSuccessToast("Part saved successfully!");
     } catch (err) {
         alert(`Failed to save part: ${err.message}`);
@@ -2147,6 +2163,7 @@ async function finalizePartDelete(partId) {
     if (window.APP_CONFIG?.USE_MOCK) {
         currentItemParts = currentItemParts.filter(p => p.partId !== partId);
         renderPartsSection();
+        syncPartCountCell();
         showSuccessToast("Part deleted.");
         return;
     }
@@ -2174,6 +2191,7 @@ async function finalizePartDelete(partId) {
         );
         if (!res.ok) throw new Error(`Status: ${res.status}`);
         await loadParts();
+        syncPartCountCell();
         showSuccessToast("Part deleted successfully.");
     } catch (err) {
         alert(`Failed to delete part: ${err.message}`);

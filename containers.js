@@ -185,6 +185,7 @@
             }
             
             renderTable();
+            loadItemCountsAsync();
         } catch (err) {
             console.error("💥 Failed to read local container mock files:", err);
             containers = [];
@@ -209,12 +210,44 @@
                 <td data-label="Purchased">${formatDate(c.purchaseDate)}</td>
                 <td data-label="Price">$${Number(c.purchasePrice || 0).toLocaleString()}</td>
                 <td data-label="Warranty">${formatDate(c.extendedWarrantyFinishDate || c.warrantyFinishDate)}</td>
+                <td data-item-count="${pk.replace('CONTAINER#', '').trim().toUpperCase()}" style="text-align:center; color:#888; font-style:italic;">...</td>
             `;
 
             row.addEventListener("click", () => openItems(pk, shortId));
 
             body.appendChild(row);
         });
+    }
+
+    async function loadItemCountsAsync() {
+        let allMockItems = null;
+        if (window.APP_CONFIG?.USE_MOCK) {
+            try { allMockItems = await apiGet("/containers/mock/items", "mock-items.json"); } catch { allMockItems = []; }
+        }
+
+        await Promise.all(containers.map(async c => {
+            const cleanId = c.PK.replace("CONTAINER#", "").trim().toUpperCase();
+            const cell = document.querySelector(`td[data-item-count="${cleanId}"]`);
+            if (!cell) return;
+            try {
+                let count = 0;
+                if (window.APP_CONFIG?.USE_MOCK) {
+                    const items = Array.isArray(allMockItems) ? allMockItems : [];
+                    count = items.filter(i => (i.containerId || "").toUpperCase() === cleanId).length;
+                } else {
+                    const res = await fetch(`${API}/containers/${cleanId}/items`, { method: "GET", headers: authHeaders() });
+                    if (res.ok) {
+                        const items = await res.json();
+                        count = Array.isArray(items) ? items.length : 0;
+                    }
+                }
+                cell.textContent = count;
+            } catch {
+                cell.textContent = "-";
+            }
+            cell.style.color = "";
+            cell.style.fontStyle = "";
+        }));
     }
 
     function openCreate() {
@@ -711,6 +744,9 @@
 // 🚀 ADD THIS NEW STATE CONTROLLER TO HANDLE DELETIONS MID-SESSION:
     async function removeAttachmentFromState(indexToDrop) {
         const att = currentItemAttachments[indexToDrop];
+        const attName = att?.name || att?.label || att?.filename || "this attachment";
+
+        if (!confirm(`Are you sure you want to delete "${attName}"? This cannot be undone.`)) return;
 
         if (editingItemId && att && att.attachmentId) {
             try {
@@ -1069,6 +1105,17 @@
         document.getElementById("deleteConfirmModal").style.display = "flex";
     }
 
+    function toggleCollectionSection(contentId, toggleId, addBtnId) {
+        const content = document.getElementById(contentId);
+        const toggle = document.getElementById(toggleId);
+        const addBtn = addBtnId ? document.getElementById(addBtnId) : null;
+        if (!content || !toggle) return;
+        const isCollapsed = content.style.display === "none";
+        content.style.display = isCollapsed ? "" : "none";
+        if (addBtn) addBtn.style.display = isCollapsed ? "" : "none";
+        toggle.textContent = isCollapsed ? "▲" : "▼";
+    }
+
     function closeDeleteModal() {
         document.getElementById("deleteConfirmModal").style.display = "none";
         deleteTargetType = null;
@@ -1184,6 +1231,24 @@ function showConfirmPopup(message, title) {
     });
 }
 
+function setAttachmentUploadLock(locked) {
+    const closeBtn = document.getElementById("attachmentCloseBtn");
+    const uploadBtn = document.getElementById("attachmentUploadBtn");
+    [closeBtn, uploadBtn].forEach(btn => {
+        if (!btn) return;
+        btn.disabled = locked;
+        btn.style.opacity = locked ? "0.45" : "";
+        btn.style.cursor = locked ? "not-allowed" : "";
+    });
+    if (locked) {
+        window._uploadBeforeUnload = e => { e.preventDefault(); e.returnValue = ""; };
+        window.addEventListener("beforeunload", window._uploadBeforeUnload);
+    } else {
+        window.removeEventListener("beforeunload", window._uploadBeforeUnload);
+        delete window._uploadBeforeUnload;
+    }
+}
+
 async function handleAttachmentUpload() {
     const fileInput = document.getElementById("itemFilePicker");
     const progressStatus = document.getElementById("uploadProgressBar");
@@ -1202,6 +1267,8 @@ async function handleAttachmentUpload() {
         progressStatus.style.display = "block";
         progressStatus.innerText = "⏳ Processing file upload...";
     }
+
+    setAttachmentUploadLock(true);
 
     if (window.APP_CONFIG?.USE_MOCK) {
         const localMockUrl = URL.createObjectURL(file);
@@ -1301,6 +1368,7 @@ async function handleAttachmentUpload() {
     } catch (err) {
         alert(`Attachment pipeline error: ${err.message}`); // Left intact to catch critical failures
     } finally {
+        setAttachmentUploadLock(false);
         if (progressStatus) progressStatus.style.display = "none";
         fileInput.value = "";
     }

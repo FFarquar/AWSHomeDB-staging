@@ -46,6 +46,7 @@
                             <th>Purchase Date</th>
                             <th>Price</th>
                             <th>Warranty</th>
+                            <th style="text-align:center;">Items</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -139,35 +140,38 @@
 
             <!-- 📎 ATTACHMENTS COLLECTION SECTION -->
             <div id="attachmentsSection" style="background:#f2f3f5; border-radius:8px; padding:14px; margin-top:15px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <label><strong>Attachments Collection</strong></label>
-                    <button type="button" class="btn-add-collection" onclick="openAddAttachment()" style="padding:0 10px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">+ Add Attachment</button>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="toggleCollectionSection('attachmentCardsList', 'attachmentsToggle', 'attachmentsAddBtn')">
+                        <label style="cursor:pointer;"><strong>Attachments</strong></label>
+                        <span id="attachmentsToggle" style="font-size:18px; user-select:none;">▼</span>
+                    </div>
+                    <button id="attachmentsAddBtn" type="button" class="btn-add-collection" onclick="openAddAttachment()" style="display:none; padding:0 10px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">+ Add Attachment</button>
                 </div>
-                <div id="attachmentCardsList" style="max-height:220px; overflow-y:auto; margin-bottom:8px;"></div>
+                <div id="attachmentCardsList" style="display:none; max-height:220px; overflow-y:auto; margin-top:10px; margin-bottom:8px;"></div>
             </div>
 
             <!-- 📝 NOTES COLLECTION SECTION (visible only when editing an existing item) -->
             <div id="notesSection" style="display:none; background:#f2f3f5; border-radius:8px; padding:14px; margin-top:15px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <label><strong>Notes Collection</strong></label>
-                    <button type="button" class="btn-add-collection" onclick="openAddNote()" style="padding:0 10px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">+ Add Note</button>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="toggleCollectionSection('notesList', 'notesToggle', 'notesAddBtn')">
+                        <label style="cursor:pointer;"><strong>Notes</strong></label>
+                        <span id="notesToggle" style="font-size:18px; user-select:none;">▼</span>
+                    </div>
+                    <button id="notesAddBtn" type="button" class="btn-add-collection" onclick="openAddNote()" style="display:none; padding:0 10px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">+ Add Note</button>
                 </div>
-
-                <!-- Existing notes render here -->
-                <div id="notesList" style="max-height:220px; overflow-y:auto; margin-bottom:8px;"></div>
-
+                <div id="notesList" style="display:none; max-height:220px; overflow-y:auto; margin-top:10px; margin-bottom:8px;"></div>
             </div>
 
             <!-- 🔩 PARTS COLLECTION SECTION (visible only when editing an existing item) -->
             <div id="partsSection" style="display:none; background:#f2f3f5; border-radius:8px; padding:14px; margin-top:15px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <label><strong>Parts Collection</strong></label>
-                    <button type="button" class="btn-add-collection" onclick="openAddPart()" style="padding:0 10px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">+ Add Part</button>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="toggleCollectionSection('partsList', 'partsToggle', 'partsAddBtn')">
+                        <label style="cursor:pointer;"><strong>Parts</strong></label>
+                        <span id="partsToggle" style="font-size:18px; user-select:none;">▼</span>
+                    </div>
+                    <button id="partsAddBtn" type="button" class="btn-add-collection" onclick="openAddPart()" style="display:none; padding:0 10px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">+ Add Part</button>
                 </div>
-
-                <!-- Existing parts render here -->
-                <div id="partsList" style="max-height:220px; overflow-y:auto; margin-bottom:8px;"></div>
-
+                <div id="partsList" style="display:none; max-height:220px; overflow-y:auto; margin-top:10px; margin-bottom:8px;"></div>
             </div>
 
             <div class="actions">
@@ -276,12 +280,12 @@
                 <label style="display:block; font-size:12px; color:#555; margin-top:6px; margin-bottom:2px;">Rename attachment before uploading (optional)</label>
                 <input type="text" id="attachmentDisplayName" placeholder="e.g. Warranty Card" style="width:100%; box-sizing:border-box; padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:12px;" />
                 <div id="uploadProgressBar" style="display:none; font-size:11px; color:#666; font-style:italic; margin-top:4px;">⏳ Contacting AWS S3 Storage Gateway...</div>
-                <button type="button" onclick="handleAttachmentUpload()" style="margin-top:8px; padding:6px 14px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Upload</button>
+                <button type="button" id="attachmentUploadBtn" onclick="handleAttachmentUpload()" style="margin-top:8px; padding:6px 14px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Upload</button>
             </div>
             <div id="attachmentCurrentFile" style="display:none; margin-top:10px; font-size:13px;"></div>
 
             <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
-                <button type="button" onclick="closeAttachmentForm()" style="padding:0 14px; background:#6c757d; color:#fff; border:none; border-radius:4px; cursor:pointer;">Close</button>
+                <button type="button" id="attachmentCloseBtn" onclick="closeAttachmentForm()" style="padding:0 14px; background:#6c757d; color:#fff; border:none; border-radius:4px; cursor:pointer;">Close</button>
                 <button type="button" id="btnDeleteAttachmentInForm" onclick="deleteAttachmentFromForm()" style="display:none; padding:0 14px; background:#ff4d4d; color:#fff; border:none; border-radius:4px; cursor:pointer;">Delete Attachment</button>
             </div>
         </div>

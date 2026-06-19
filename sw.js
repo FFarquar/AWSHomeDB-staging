@@ -1,4 +1,4 @@
-const CACHE_NAME = 'homedb-v2';
+const CACHE_NAME = 'homedb-v225';
 
 const PRECACHE_ASSETS = [
   './login.html',

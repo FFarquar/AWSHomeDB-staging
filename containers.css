@@ -601,3 +601,31 @@
             flex: 1;
         }
     }
+
+/* Button interaction feedback */
+button {
+    transition: opacity 0.15s, transform 0.1s;
+}
+button:active:not(:disabled) {
+    opacity: 0.85;
+    transform: scale(0.97);
+}
+button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+@keyframes btn-spin {
+    to { transform: rotate(360deg); }
+}
+button.btn-loading::before {
+    content: "";
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: btn-spin 0.65s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+}

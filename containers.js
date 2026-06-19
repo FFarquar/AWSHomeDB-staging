@@ -174,22 +174,25 @@
  // ==========================================
     // SECTION 1: CONTAINERS LOGIC METHODS
     // ==========================================
-    async function loadContainers() {
+    async function loadContainers(btn = null) {
+        setLoading(btn, true);
         try {
             // ✨ FIXED: Pulls straight from your apiClient file wrapper with zero hardcoded references
             containers = await apiGet("/containers", "mock-containers.json");
-            
+
             if (!Array.isArray(containers)) {
                 console.warn("⚠️ Warning: mock-containers.json data format is missing or invalid.");
                 containers = [];
             }
-            
+
             renderTable();
             loadItemCountsAsync();
         } catch (err) {
             console.error("💥 Failed to read local container mock files:", err);
             containers = [];
             renderTable();
+        } finally {
+            setLoading(btn, false);
         }
     }
 
@@ -210,7 +213,7 @@
                 <td data-label="Purchased">${formatDate(c.purchaseDate)}</td>
                 <td data-label="Price">$${Number(c.purchasePrice || 0).toLocaleString()}</td>
                 <td data-label="Warranty">${formatDate(c.extendedWarrantyFinishDate || c.warrantyFinishDate)}</td>
-                <td data-item-count="${pk.replace('CONTAINER#', '').trim().toUpperCase()}" style="text-align:center; color:#888; font-style:italic;">...</td>
+                <td data-label="Items" data-item-count="${pk.replace('CONTAINER#', '').trim().toUpperCase()}" style="text-align:center; color:#888; font-style:italic;">...</td>
             `;
 
             row.addEventListener("click", () => openItems(pk, shortId));
@@ -284,7 +287,7 @@
         removeItem(activeContainerPK);
     }
 
-     async function save() {
+     async function save(btn = null) {
         if (!isAdmin) { showInfoPopup("Unauthorized action."); return; }
 
         const name = document.getElementById("name").value.trim();
@@ -329,6 +332,7 @@
             return; 
         }
 
+        setLoading(btn, true);
         try {
             if (editingId) {
                 const cleanId = editingId.replace("CONTAINER#", "");
@@ -353,6 +357,8 @@
             await loadContainers();
         } catch (err) {
             alert(`Failed network transaction: ${err.message}`);
+        } finally {
+            setLoading(btn, false);
         }
     }
 
@@ -986,7 +992,7 @@
         closeAttachmentForm();
     }
 
-        async function saveItem() {
+        async function saveItem(btn = null) {
         if (!canManageItems) { showInfoPopup("Action restricted."); return; }
         const nameVal = document.getElementById("itemName").value.trim();
         if (!nameVal) { showInfoPopup("Item Name is mandatory."); return; }
@@ -1047,6 +1053,7 @@
             return;
         }
 
+        setLoading(btn, true);
         try {
             let path = `${API}/containers/${activeShortContainerId}/items`;
             let method = "POST";
@@ -1075,6 +1082,8 @@
 
         } catch (error) {
             alert(`Save lifecycle failed: ${error.message}`);
+        } finally {
+            setLoading(btn, false);
         }
     }
 
@@ -1277,6 +1286,12 @@
         localStorage.clear();
         window.location.href = "login.html";
     }
+
+function setLoading(btn, isLoading) {
+    if (!btn) return;
+    btn.classList.toggle("btn-loading", isLoading);
+    btn.disabled = isLoading;
+}
 
 // Add this helper function somewhere in your script
 function showSuccessToast(message) {
@@ -1728,7 +1743,7 @@ async function handleNoteAttachmentUpload() {
     }
 }
 
-async function saveNote() {
+async function saveNote(btn = null) {
     const description = document.getElementById("noteDescription").value.trim();
     if (!description) { showInfoPopup("Description is required."); return; }
 
@@ -1774,6 +1789,7 @@ async function saveNote() {
         return;
     }
 
+    setLoading(btn, true);
     try {
         let path = `${API}/containers/${activeShortContainerId}/items/${editingItemId}/notes`;
         let method = "POST";
@@ -1795,6 +1811,8 @@ async function saveNote() {
         showSuccessToast("Note saved successfully!");
     } catch (err) {
         alert(`Failed to save note: ${err.message}`);
+    } finally {
+        setLoading(btn, false);
     }
 }
 
@@ -2078,7 +2096,7 @@ async function handlePartAttachmentUpload() {
     }
 }
 
-async function savePart() {
+async function savePart(btn = null) {
     const name = document.getElementById("partName").value.trim();
     if (!name) { showInfoPopup("Name is required."); return; }
 
@@ -2129,6 +2147,7 @@ async function savePart() {
         return;
     }
 
+    setLoading(btn, true);
     try {
         let path = `${API}/containers/${activeShortContainerId}/items/${editingItemId}/parts`;
         let method = "POST";
@@ -2150,6 +2169,8 @@ async function savePart() {
         showSuccessToast("Part saved successfully!");
     } catch (err) {
         alert(`Failed to save part: ${err.message}`);
+    } finally {
+        setLoading(btn, false);
     }
 }
 
@@ -2314,7 +2335,7 @@ function closeAdminUserForm() {
     adminEditingLoginId = null;
 }
 
-async function saveAdminUser() {
+async function saveAdminUser(btn = null) {
     const role = document.getElementById("adminRole").value;
     const active = document.getElementById("adminActive").value === "true";
 
@@ -2327,6 +2348,7 @@ async function saveAdminUser() {
             showSuccessToast("User updated.");
             return;
         }
+        setLoading(btn, true);
         try {
             const res = await fetch(`${API}/admin/users/${adminEditingLoginId}`, {
                 method: "PUT",
@@ -2341,6 +2363,8 @@ async function saveAdminUser() {
             await loadAdminUsers();
         } catch (err) {
             alert(`Failed to update user: ${err.message}`);
+        } finally {
+            setLoading(btn, false);
         }
     } else {
         const loginID = document.getElementById("adminLoginId").value.trim();
@@ -2359,6 +2383,7 @@ async function saveAdminUser() {
             showSuccessToast("User created.");
             return;
         }
+        setLoading(btn, true);
         try {
             const res = await fetch(`${API}/admin/users`, {
                 method: "POST",
@@ -2373,6 +2398,8 @@ async function saveAdminUser() {
             await loadAdminUsers();
         } catch (err) {
             alert(`Failed to create user: ${err.message}`);
+        } finally {
+            setLoading(btn, false);
         }
     }
 }
@@ -2391,7 +2418,7 @@ function closeAdminPasswordModal() {
     adminPasswordTargetLoginId = null;
 }
 
-async function saveAdminPassword() {
+async function saveAdminPassword(btn = null) {
     const newPwd = document.getElementById("adminNewPassword").value;
     const confirmPwd = document.getElementById("adminConfirmPassword").value;
 
@@ -2405,6 +2432,7 @@ async function saveAdminPassword() {
         return;
     }
 
+    setLoading(btn, true);
     try {
         const res = await fetch(`${API}/admin/users/${adminPasswordTargetLoginId}/password`, {
             method: "PUT",
@@ -2418,6 +2446,8 @@ async function saveAdminPassword() {
         showSuccessToast("Password updated successfully.");
     } catch (err) {
         alert(`Failed to update password: ${err.message}`);
+    } finally {
+        setLoading(btn, false);
     }
 }
 
@@ -2508,7 +2538,7 @@ async function loadAdminSettings() {
     }
 }
 
-async function saveAdminSettings() {
+async function saveAdminSettings(btn = null) {
     const pdfInput = document.getElementById("adminPdfSizeLimit");
     const compressionSelect = document.getElementById("adminImageCompressionEnabled");
     const containerBtnsToggle = document.getElementById("adminShowContainerButtons");
@@ -2527,6 +2557,7 @@ async function saveAdminSettings() {
         return;
     }
 
+    setLoading(btn, true);
     try {
         const res = await fetch(`${API}/admin/settings`, {
             method: "PUT",
@@ -2543,6 +2574,8 @@ async function saveAdminSettings() {
         showSuccessToast("Upload settings saved.");
     } catch (err) {
         alert(`Failed to save settings: ${err.message}`);
+    } finally {
+        setLoading(btn, false);
     }
 }
 

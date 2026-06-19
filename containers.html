@@ -25,8 +25,8 @@
         </div>
         <div style="display:flex; align-items:center; gap:14px;">
             <span id="versionBadge"></span>
-            <button class="btn-secondary" onclick="logout()">Logout</button>
-            <button id="btnAdminPanel" class="btn-primary" onclick="openAdminPanel()" style="display:none;">Admin</button>
+            <button class="btn-secondary" onclick="logout()" style="min-height:25px; padding:6px 14px; font-size:13px;">Logout</button>
+            <button id="btnAdminPanel" class="btn-primary" onclick="openAdminPanel()" style="display:none; min-height:25px; padding:6px 14px; font-size:13px;">Admin</button>
         </div>
     </header>
 
@@ -37,8 +37,8 @@
         <!-- ========================================== -->
         <div id="containersPanelView">
             <div class="toolbar">
-                <button class="btn-primary" id="btnNewContainer" onclick="openCreate()">New Container</button>
-                <button class="btn-secondary" onclick="loadContainers()">Refresh</button>
+                <button class="btn-primary" id="btnNewContainer" onclick="openCreate()" style="min-height:25px; padding:6px 14px; font-size:13px;">New Container</button>
+                <button class="btn-secondary" onclick="loadContainers(this)" style="min-height:25px; padding:6px 14px; font-size:13px;">Refresh</button>
             </div>
 
             <div class="table-wrapper">
@@ -117,7 +117,7 @@
             <div class="form-group"><label>Purchase Price</label><input id="purchasePrice" type="number" /></div>
             <div class="small" id="editHint"></div>
             <div class="actions">
-                <button class="btn-primary" onclick="save()">Save</button>
+                <button class="btn-primary" onclick="save(this)">Save</button>
                 <button class="btn-secondary" onclick="closeModal()">Cancel</button>
             </div>
         </div>
@@ -178,7 +178,7 @@
             </div>
 
             <div class="actions">
-                <button class="btn-primary" onclick="saveItem()">Save Item</button>
+                <button class="btn-primary" onclick="saveItem(this)">Save Item</button>
                 <button class="btn-danger" id="btnDeleteItem" onclick="deleteCurrentItem()" style="display:none;">Delete Item</button>
                 <button class="btn-secondary" onclick="closeItemModal()">Cancel</button>
             </div>
@@ -214,7 +214,7 @@
             </div>
 
             <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
-                <button type="button" onclick="saveNote()" style="padding:0 14px; background:#28a745; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Save Note</button>
+                <button type="button" onclick="saveNote(this)" style="padding:0 14px; background:#28a745; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Save Note</button>
                 <button type="button" onclick="closeNoteForm()" style="padding:0 14px; background:#6c757d; color:#fff; border:none; border-radius:4px; cursor:pointer;">Cancel</button>
                 <button type="button" id="btnDeleteNoteInForm" onclick="deleteNoteFromForm()" style="display:none; padding:0 14px; background:#ff4d4d; color:#fff; border:none; border-radius:4px; cursor:pointer;">Delete Note</button>
             </div>
@@ -262,7 +262,7 @@
             </div>
 
             <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
-                <button type="button" onclick="savePart()" style="padding:0 14px; background:#28a745; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Save Part</button>
+                <button type="button" onclick="savePart(this)" style="padding:0 14px; background:#28a745; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Save Part</button>
                 <button type="button" onclick="closePartForm()" style="padding:0 14px; background:#6c757d; color:#fff; border:none; border-radius:4px; cursor:pointer;">Cancel</button>
                 <button type="button" id="btnDeletePartInForm" onclick="deletePartFromForm()" style="display:none; padding:0 14px; background:#ff4d4d; color:#fff; border:none; border-radius:4px; cursor:pointer;">Delete Part</button>
             </div>
@@ -384,7 +384,7 @@
                 </label>
             </div>
             <div style="margin-bottom:4px;">
-                <button class="btn-primary" onclick="saveAdminSettings()" style="font-size:14px; min-height:36px; padding:6px 14px;">Save Settings</button>
+                <button class="btn-primary" onclick="saveAdminSettings(this)" style="font-size:14px; min-height:36px; padding:6px 14px;">Save Settings</button>
             </div>
 
             <div class="actions" style="margin-top:16px; justify-content:flex-end;">
@@ -427,7 +427,7 @@
                 <input id="adminPasswordConfirm" type="password" autocomplete="new-password" />
             </div>
             <div class="actions">
-                <button class="btn-primary" onclick="saveAdminUser()">Save</button>
+                <button class="btn-primary" onclick="saveAdminUser(this)">Save</button>
                 <button class="btn-secondary" onclick="closeAdminUserForm()">Cancel</button>
             </div>
         </div>
@@ -449,7 +449,7 @@
                 <input id="adminConfirmPassword" type="password" autocomplete="new-password" />
             </div>
             <div class="actions">
-                <button class="btn-primary" onclick="saveAdminPassword()">Update Password</button>
+                <button class="btn-primary" onclick="saveAdminPassword(this)">Update Password</button>
                 <button class="btn-secondary" onclick="closeAdminPasswordModal()">Cancel</button>
             </div>
         </div>

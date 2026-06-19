@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#232f3e" />
     <title>AWS Home DB - Login</title>
-    <link rel="icon" href="data:,">
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <script src="./config.js"></script>
     <!-- needed to mock local data -->
     <script src="https://cloudflare.com"></script>  
@@ -34,6 +36,7 @@
 
 <div class="login-card">
     <h2>Login</h2>
+    <div style="text-align:center; margin:-8px 0 14px;"><span id="envBadge"></span></div>
     <form id="loginForm">
         <div class="form-group">
             <label for="username">Username (LoginID)</label>
@@ -133,6 +136,27 @@
             errorDiv.style.display = 'block';
         }
     });
+</script>
+
+<script>
+    (function () {
+        var env = window.APP_CONFIG && window.APP_CONFIG.ENVIRONMENT;
+        if (!env) return;
+        var badge = document.getElementById('envBadge');
+        if (!badge) return;
+        badge.textContent = env;
+        var colours = { STAGING: '#f59e0b', PRODUCTION: '#16a34a', LOCAL: '#6b7280' };
+        badge.style.cssText = 'background:' + (colours[env] || '#6b7280') + '; color:#fff; padding:2px 10px; border-radius:4px; font-size:12px; font-weight:bold; letter-spacing:0.5px;';
+    })();
+</script>
+
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('./sw.js')
+                .catch(function (err) { console.warn('SW registration failed:', err); });
+        });
+    }
 </script>
 
 </body>

@@ -4,13 +4,16 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="containers.css?v=7">    
+    <meta name="theme-color" content="#232f3e" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="stylesheet" href="containers.css?v=7">
     <title>AWS Home DB - Containers & Items</title>
 
     <script src="./config.js"></script>
     <script src="./apiClient.js"></script>
 
-   
+
 </head>
 
 <body>
@@ -452,6 +455,15 @@
         </div>
     </div>
 
+    <!-- PWA Install Banner -->
+    <div id="pwaInstallBanner" style="display:none; position:fixed; bottom:0; left:0; right:0; background:#232f3e; color:white; padding:12px 16px; align-items:center; justify-content:space-between; gap:12px; z-index:9999; box-shadow:0 -2px 8px rgba(0,0,0,0.4);">
+        <span style="font-size:14px;">Install <strong>Home DB</strong> as an app for quick access</span>
+        <div style="display:flex; gap:8px; flex-shrink:0;">
+            <button id="btnPwaInstall" style="background:#ff9900; color:white; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:13px; min-height:unset;">Install</button>
+            <button id="btnPwaDismiss" style="background:transparent; color:#ccc; border:1px solid #555; padding:8px 12px; border-radius:6px; cursor:pointer; font-size:13px; min-height:unset;">Not now</button>
+        </div>
+    </div>
+
     <script src="containers.js"></script>
     <script>
         (function () {
@@ -463,6 +475,37 @@
             var colours = { STAGING: '#f59e0b', PRODUCTION: '#16a34a', LOCAL: '#6b7280' };
             badge.style.cssText = 'background:' + (colours[env] || '#6b7280') + '; color:#fff; padding:2px 10px; border-radius:4px; font-size:12px; font-weight:bold; letter-spacing:0.5px;';
         })();
+
+        // PWA: capture install prompt and wire up banner
+        var _deferredInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', function (e) {
+            e.preventDefault();
+            _deferredInstallPrompt = e;
+            if (!sessionStorage.getItem('pwa-banner-dismissed')) {
+                var banner = document.getElementById('pwaInstallBanner');
+                if (banner) banner.style.display = 'flex';
+            }
+        });
+        document.getElementById('btnPwaInstall').addEventListener('click', function () {
+            if (!_deferredInstallPrompt) return;
+            _deferredInstallPrompt.prompt();
+            _deferredInstallPrompt.userChoice.then(function () {
+                _deferredInstallPrompt = null;
+                document.getElementById('pwaInstallBanner').style.display = 'none';
+            });
+        });
+        document.getElementById('btnPwaDismiss').addEventListener('click', function () {
+            document.getElementById('pwaInstallBanner').style.display = 'none';
+            sessionStorage.setItem('pwa-banner-dismissed', '1');
+        });
+
+        // Service Worker registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('./sw.js')
+                    .catch(function (err) { console.warn('SW registration failed:', err); });
+            });
+        }
     </script>
 </body>
 </html>

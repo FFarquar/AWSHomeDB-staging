@@ -32,6 +32,21 @@
 
     let uploadSettings = { pdfSizeLimitMB: 5, imageCompressionEnabled: true, showContainerButtons: true };
 
+    let itemFormDirty = false;
+
+    function updateItemModalButtons() {
+        const saveBtn = document.getElementById("btnSaveItem");
+        if (!saveBtn) return;
+        saveBtn.disabled = !itemFormDirty;
+        saveBtn.style.opacity = itemFormDirty ? "" : "0.45";
+        saveBtn.style.cursor = itemFormDirty ? "" : "not-allowed";
+    }
+
+    function markItemFormDirty() {
+        itemFormDirty = true;
+        updateItemModalButtons();
+    }
+
     let editingAttachmentIdx = null; // Index in currentItemAttachments being viewed/deleted
 
     let editingId = null;       // Tracks primary container PK edits
@@ -79,6 +94,16 @@
         loadContainers();
         loadCategories();
         fetchUploadSettings();
+
+        // Attach dirty-tracking listeners to item form fields
+        ["itemName", "itemCategory", "itemPurchasedFrom", "itemPurchasePrice", "itemPurchaseDate", "itemWarrantyExpiryDate", "itemPhysicalLocation"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener("input", markItemFormDirty);
+                el.addEventListener("change", markItemFormDirty);
+            }
+        });
+        updateItemModalButtons();
 
         history.replaceState({ view: 'app' }, '');
         history.pushState({ view: 'app' }, '');
@@ -356,7 +381,7 @@
             closeModal();
             await loadContainers();
         } catch (err) {
-            alert(`Failed network transaction: ${err.message}`);
+            showInfoPopup(`Failed network transaction: ${err.message}`);
         } finally {
             setLoading(btn, false);
         }
@@ -495,7 +520,7 @@
             await loadContainers();
             showSuccessToast("Container deleted successfully.");
         } catch (error) {
-            alert("Failed to delete the container from the cloud.");
+            showInfoPopup("Failed to delete the container from the cloud.");
         }
     }
 
@@ -719,6 +744,8 @@
         document.getElementById("partsSection").style.display = "none";
         const btnDelete = document.getElementById("btnDeleteItem");
         if (btnDelete) btnDelete.style.display = "none";
+        itemFormDirty = false;
+        updateItemModalButtons();
         document.getElementById("itemModal").style.display = "flex";
     }
 
@@ -802,11 +829,14 @@
         document.getElementById("partsToggle").textContent = "▼";
         document.getElementById("partsAddBtn").style.display = "none";
 
+        itemFormDirty = false;
+        updateItemModalButtons();
         document.getElementById("itemModal").style.display = "flex";
     }
 
     function closeItemModal() {
         document.getElementById("itemModal").style.display = "none";
+        itemFormDirty = false;
         editingItemId = null;
         currentItemNotes = [];
         editingNoteId = null;
@@ -855,7 +885,7 @@
         const att = currentItemAttachments[indexToDrop];
         const attName = att?.name || att?.label || att?.filename || "this attachment";
 
-        if (!confirm(`Are you sure you want to delete "${attName}"? This cannot be undone.`)) return;
+        if (!await showConfirmPopup(`Are you sure you want to delete "${attName}"? This cannot be undone.`, "Delete Attachment")) return;
 
         if (editingItemId && att && att.attachmentId) {
             try {
@@ -875,7 +905,7 @@
                     throw new Error(err.message || `Status ${res.status}`);
                 }
             } catch (error) {
-                alert(`Failed to delete attachment: ${error.message}`);
+                showInfoPopup(`Failed to delete attachment: ${error.message}`);
                 return;
             }
         }
@@ -1081,7 +1111,7 @@
             showSuccessToast('Item saved successfully to the database!');
 
         } catch (error) {
-            alert(`Save lifecycle failed: ${error.message}`);
+            showInfoPopup(`Save lifecycle failed: ${error.message}`);
         } finally {
             setLoading(btn, false);
         }
@@ -1176,7 +1206,7 @@
             await loadItems();
             showSuccessToast("Item and related data deleted successfully.");
         } catch (err) {
-            alert(`Delete transaction failure: ${err.message}`);
+            showInfoPopup(`Delete transaction failure: ${err.message}`);
         }
     }
 
@@ -1199,7 +1229,7 @@
                 if (!res.ok) throw new Error(`Presign failed: ${res.status}`);
                 ({ downloadUrl } = await res.json());
             } catch (err) {
-                alert(`Could not prepare download: ${err.message}`);
+                showInfoPopup(`Could not prepare download: ${err.message}`);
                 return;
             }
         }
@@ -1414,6 +1444,7 @@ async function handleAttachmentUpload() {
             url: localMockUrl
         });
         renderAttachmentCards();
+        markItemFormDirty();
         closeAttachmentForm();
         if (progressStatus) progressStatus.style.display = "none";
         fileInput.value = "";
@@ -1460,6 +1491,7 @@ async function handleAttachmentUpload() {
 
             currentItemAttachments.push(stagedAttachment);
             renderAttachmentCards();
+            markItemFormDirty();
             closeAttachmentForm();
             showSuccessToast(`Staged "${displayName}"! Will save with item.`);
 
@@ -1500,7 +1532,7 @@ async function handleAttachmentUpload() {
         }
 
     } catch (err) {
-        alert(`Attachment pipeline error: ${err.message}`); // Left intact to catch critical failures
+        showInfoPopup(`Attachment pipeline error: ${err.message}`);
     } finally {
         setAttachmentUploadLock(false);
         if (progressStatus) progressStatus.style.display = "none";
@@ -1735,7 +1767,7 @@ async function handleNoteAttachmentUpload() {
         }
         return true;
     } catch (err) {
-        alert(`Note attachment error: ${err.message}`);
+        showInfoPopup(`Note attachment error: ${err.message}`);
         return false;
     } finally {
         if (progressStatus) progressStatus.style.display = "none";
@@ -1810,7 +1842,7 @@ async function saveNote(btn = null) {
         syncNoteCountCell();
         showSuccessToast("Note saved successfully!");
     } catch (err) {
-        alert(`Failed to save note: ${err.message}`);
+        showInfoPopup(`Failed to save note: ${err.message}`);
     } finally {
         setLoading(btn, false);
     }
@@ -1857,7 +1889,7 @@ async function finalizeNoteDelete(noteId) {
         syncNoteCountCell();
         showSuccessToast("Note deleted successfully.");
     } catch (err) {
-        alert(`Failed to delete note: ${err.message}`);
+        showInfoPopup(`Failed to delete note: ${err.message}`);
     }
 }
 
@@ -2088,7 +2120,7 @@ async function handlePartAttachmentUpload() {
         }
         return true;
     } catch (err) {
-        alert(`Part attachment error: ${err.message}`);
+        showInfoPopup(`Part attachment error: ${err.message}`);
         return false;
     } finally {
         if (progressStatus) progressStatus.style.display = "none";
@@ -2168,7 +2200,7 @@ async function savePart(btn = null) {
         syncPartCountCell();
         showSuccessToast("Part saved successfully!");
     } catch (err) {
-        alert(`Failed to save part: ${err.message}`);
+        showInfoPopup(`Failed to save part: ${err.message}`);
     } finally {
         setLoading(btn, false);
     }
@@ -2215,7 +2247,7 @@ async function finalizePartDelete(partId) {
         syncPartCountCell();
         showSuccessToast("Part deleted successfully.");
     } catch (err) {
-        alert(`Failed to delete part: ${err.message}`);
+        showInfoPopup(`Failed to delete part: ${err.message}`);
     }
 }
 
@@ -2362,7 +2394,7 @@ async function saveAdminUser(btn = null) {
             showSuccessToast("User updated successfully.");
             await loadAdminUsers();
         } catch (err) {
-            alert(`Failed to update user: ${err.message}`);
+            showInfoPopup(`Failed to update user: ${err.message}`);
         } finally {
             setLoading(btn, false);
         }
@@ -2397,7 +2429,7 @@ async function saveAdminUser(btn = null) {
             showSuccessToast("User created successfully.");
             await loadAdminUsers();
         } catch (err) {
-            alert(`Failed to create user: ${err.message}`);
+            showInfoPopup(`Failed to create user: ${err.message}`);
         } finally {
             setLoading(btn, false);
         }
@@ -2445,7 +2477,7 @@ async function saveAdminPassword(btn = null) {
         closeAdminPasswordModal();
         showSuccessToast("Password updated successfully.");
     } catch (err) {
-        alert(`Failed to update password: ${err.message}`);
+        showInfoPopup(`Failed to update password: ${err.message}`);
     } finally {
         setLoading(btn, false);
     }
@@ -2475,7 +2507,7 @@ async function finalizeAdminUserDelete(loginID) {
         showSuccessToast("User deleted successfully.");
         await loadAdminUsers();
     } catch (err) {
-        alert(`Failed to delete user: ${err.message}`);
+        showInfoPopup(`Failed to delete user: ${err.message}`);
     }
 }
 
@@ -2573,7 +2605,7 @@ async function saveAdminSettings(btn = null) {
         applyContainerButtonVisibility();
         showSuccessToast("Upload settings saved.");
     } catch (err) {
-        alert(`Failed to save settings: ${err.message}`);
+        showInfoPopup(`Failed to save settings: ${err.message}`);
     } finally {
         setLoading(btn, false);
     }

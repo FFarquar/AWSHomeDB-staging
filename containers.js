@@ -33,18 +33,38 @@
     let uploadSettings = { pdfSizeLimitMB: 5, imageCompressionEnabled: true, showContainerButtons: true };
 
     let itemFormDirty = false;
+    let itemCollectionsChanged = false; // notes/parts/attachments staged but not yet committed
+    let deletedNotes = [];              // existing notes removed this session — DELETE on Ok
+    let deletedParts = [];              // existing parts removed this session — DELETE on Ok
+    let deletedAttachmentIds = [];      // existing item-attachment IDs removed — DELETE on Ok
 
     function updateItemModalButtons() {
         const saveBtn = document.getElementById("btnSaveItem");
         if (!saveBtn) return;
-        saveBtn.disabled = !itemFormDirty;
-        saveBtn.style.opacity = itemFormDirty ? "" : "0.45";
-        saveBtn.style.cursor = itemFormDirty ? "" : "not-allowed";
+        const hasChanges = itemFormDirty || itemCollectionsChanged;
+        saveBtn.disabled = !hasChanges;
+        saveBtn.style.opacity = hasChanges ? "" : "0.45";
+        saveBtn.style.cursor = hasChanges ? "" : "not-allowed";
     }
 
     function markItemFormDirty() {
         itemFormDirty = true;
         updateItemModalButtons();
+    }
+
+    function markCollectionsChanged() {
+        itemCollectionsChanged = true;
+        updateItemModalButtons();
+    }
+
+    // Revoke all blob URLs created during the current modal session to free memory.
+    function revokeSessionBlobUrls() {
+        const revoke = atts => { if (Array.isArray(atts)) atts.forEach(a => { if (a._localUrl) URL.revokeObjectURL(a._localUrl); }); };
+        revoke(currentItemAttachments);
+        currentItemNotes.forEach(n => revoke(n.attachments));
+        currentItemParts.forEach(p => revoke(p.attachments));
+        revoke(currentNoteAttachments);
+        revoke(currentPartAttachments);
     }
 
     let editingAttachmentIdx = null; // Index in currentItemAttachments being viewed/deleted
@@ -745,6 +765,8 @@
         const btnDelete = document.getElementById("btnDeleteItem");
         if (btnDelete) btnDelete.style.display = "none";
         itemFormDirty = false;
+        itemCollectionsChanged = false;
+        deletedNotes = []; deletedParts = []; deletedAttachmentIds = [];
         updateItemModalButtons();
         document.getElementById("itemModal").style.display = "flex";
     }
@@ -781,7 +803,7 @@
             }
         }
 
-        document.getElementById("itemModalTitle").innerText = "Modify Item Properties";
+        document.getElementById("itemModalTitle").innerText = "Item Details";
 
         document.getElementById("itemName").value = target.itemName || "";
         document.getElementById("itemCategory").value = target.category || "";
@@ -830,13 +852,18 @@
         document.getElementById("partsAddBtn").style.display = "none";
 
         itemFormDirty = false;
+        itemCollectionsChanged = false;
+        deletedNotes = []; deletedParts = []; deletedAttachmentIds = [];
         updateItemModalButtons();
         document.getElementById("itemModal").style.display = "flex";
     }
 
     function closeItemModal() {
+        revokeSessionBlobUrls();
         document.getElementById("itemModal").style.display = "none";
         itemFormDirty = false;
+        itemCollectionsChanged = false;
+        deletedNotes = []; deletedParts = []; deletedAttachmentIds = [];
         editingItemId = null;
         currentItemNotes = [];
         editingNoteId = null;
@@ -849,6 +876,55 @@
         editingAttachmentIdx = null;
         document.getElementById("attachmentModal").style.display = "none";
         clearItemForm();
+    }
+
+    async function cancelItemModal() {
+        if (!itemFormDirty && !itemCollectionsChanged) {
+            closeItemModal();
+            return;
+        }
+        const confirmed = await showConfirmPopup(
+            "You have unsaved changes. Any staged notes, parts or attachments will be discarded. Are you sure you want to cancel?",
+            "Discard Changes?"
+        );
+        if (confirmed) closeItemModal();
+    }
+
+    // Upload a staged File to S3 and return the real fileUrl.
+    async function uploadPendingAttachment(file, displayName) {
+        const prepared = await checkAndPrepareFile(file, null);
+        if (!prepared) throw new Error("File preparation failed.");
+        const ext = prepared.name.includes('.') ? '.' + prepared.name.split('.').pop() : '';
+        const s3Name = (ext && !displayName.toLowerCase().endsWith(ext.toLowerCase())) ? displayName + ext : displayName;
+        const presignRes = await fetch(
+            `${API}/attachments/presign?filename=${encodeURIComponent(s3Name)}&contentType=${encodeURIComponent(prepared.type)}`,
+            { headers: authHeaders() }
+        );
+        if (!presignRes.ok) throw new Error("Failed to get upload URL.");
+        const { uploadUrl, fileUrl } = await presignRes.json();
+        const uploadRes = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": prepared.type }, body: prepared });
+        if (!uploadRes.ok) throw new Error("S3 upload failed.");
+        return fileUrl;
+    }
+
+    // Upload any _pendingFile attachments in the array; return a clean array with real S3 URLs.
+    async function resolveAttachments(attachments) {
+        return Promise.all((attachments || []).map(async att => {
+            if (!att._pendingFile) {
+                const { _pendingFile, _localUrl, _isNew, _modified, ...clean } = att;
+                return clean;
+            }
+            const fileUrl = await uploadPendingAttachment(att._pendingFile, att.filename || att.label || 'file');
+            if (att._localUrl) URL.revokeObjectURL(att._localUrl);
+            return {
+                attachmentId: att.attachmentId || `att-${Date.now()}`,
+                filename: att.filename || att.label || 'File',
+                label: att.filename || att.label || 'File',
+                fileUrl,
+                s3Url: fileUrl,
+                uploadedAt: new Date().toISOString()
+            };
+        }));
     }
 
     function clearItemForm() {
@@ -880,39 +956,26 @@
         renderModalAttachments();
     }
 
-// 🚀 ADD THIS NEW STATE CONTROLLER TO HANDLE DELETIONS MID-SESSION:
     async function removeAttachmentFromState(indexToDrop) {
         const att = currentItemAttachments[indexToDrop];
         const attName = att?.name || att?.label || att?.filename || "this attachment";
 
-        if (!await showConfirmPopup(`Are you sure you want to delete "${attName}"? This cannot be undone.`, "Delete Attachment")) return;
+        if (!await showConfirmPopup(`Remove "${attName}" from this item?`, "Remove Attachment")) return;
 
-        if (editingItemId && att && att.attachmentId) {
-            try {
-                const cleanContainerId = String(activeShortContainerId).replace("CONTAINER#", "").trim();
-                const cleanItemId = String(editingItemId).replace("ITEM#", "").trim();
-                const res = await fetch(`${API}/attachments/delete`, {
-                    method: "POST",
-                    headers: authHeaders(),
-                    body: JSON.stringify({
-                        pk: `CONTAINER#${cleanContainerId.toUpperCase()}`,
-                        sk: `ITEM#${cleanItemId.toUpperCase()}`,
-                        attachmentId: att.attachmentId
-                    })
-                });
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    throw new Error(err.message || `Status ${res.status}`);
-                }
-            } catch (error) {
-                showInfoPopup(`Failed to delete attachment: ${error.message}`);
-                return;
-            }
+        // Track existing (already-committed) attachments for DB/S3 cleanup on Ok press.
+        if (!att._isNew && !att._pendingFile && att.attachmentId) {
+            deletedAttachmentIds.push(att.attachmentId);
         }
+        if (att._localUrl) URL.revokeObjectURL(att._localUrl);
 
         currentItemAttachments.splice(indexToDrop, 1);
         updateModalAttachmentListUI();
         renderAttachmentCards();
+        if (editingItemId) {
+            markCollectionsChanged();
+        } else {
+            markItemFormDirty();
+        }
     }
 
     function updateModalAttachmentListUI() {
@@ -1027,39 +1090,23 @@
         const nameVal = document.getElementById("itemName").value.trim();
         if (!nameVal) { showInfoPopup("Item Name is mandatory."); return; }
 
-        // Clean file properties structure ensuring compatibility across both modal variations
-        const cleanedAttachments = currentItemAttachments.map(att => ({
-            attachmentId: att.attachmentId || `att-${Date.now()}`,
-            filename: att.filename || att.label || "File Attachment",
-            fileUrl: att.fileUrl || att.s3Url || "",
-            label: att.filename || att.label || "File Attachment", 
-            s3Url: att.fileUrl || att.s3Url || ""                  
-        }));
-
-        // ✨ The Fix: Payload variable strings mapped exactly to match items-create backend properties
-        const payload = {
-            itemName: nameVal,
-            itemCategory: document.getElementById("itemCategory").value.trim() || "General",
-            itempurchasedFrom: document.getElementById("itemPurchasedFrom").value.trim() || "Unknown",
-            itempurchasePrice: Number(document.getElementById("itemPurchasePrice").value) || 0,
-            itempurchaseDate: document.getElementById("itemPurchaseDate").value || null,
-            itemwarrantyPeriod: document.getElementById("itemWarrantyExpiryDate").value || "1970-01-01",
-            itemphysicalPaperStorageLocation: document.getElementById("itemPhysicalLocation").value.trim(),
-            // 🌟 Crucial Alignment Fix: Matches body.itemAttachments exactly
-            itemAttachments: cleanedAttachments 
-        };
-
         if (window.APP_CONFIG?.USE_MOCK) {
-            // Map prefixed payload keys to the flat names openItemEdit() reads (matching DynamoDB format)
+            const mockAtts = currentItemAttachments.map(att => ({
+                attachmentId: att.attachmentId || `att-${Date.now()}`,
+                filename: att.filename || att.label || "File Attachment",
+                fileUrl: att._localUrl || att.fileUrl || att.s3Url || "",
+                label: att.filename || att.label || "File Attachment",
+                s3Url: att._localUrl || att.fileUrl || att.s3Url || ""
+            }));
             const flatPayload = {
-                itemName: payload.itemName,
-                category: payload.itemCategory,
-                purchasedFrom: payload.itempurchasedFrom,
-                purchasePrice: payload.itempurchasePrice,
-                purchaseDate: payload.itempurchaseDate,
-                warrantyExpiryDate: payload.itemwarrantyPeriod,
-                physicalPaperStorageLocation: payload.itemphysicalPaperStorageLocation,
-                attachments: payload.itemAttachments
+                itemName: nameVal,
+                category: document.getElementById("itemCategory").value.trim() || "General",
+                purchasedFrom: document.getElementById("itemPurchasedFrom").value.trim() || "Unknown",
+                purchasePrice: Number(document.getElementById("itemPurchasePrice").value) || 0,
+                purchaseDate: document.getElementById("itemPurchaseDate").value || null,
+                warrantyExpiryDate: document.getElementById("itemWarrantyExpiryDate").value || "1970-01-01",
+                physicalPaperStorageLocation: document.getElementById("itemPhysicalLocation").value.trim(),
+                attachments: mockAtts
             };
             if (editingItemId) {
                 const idx = childItems.findIndex(i => i.itemId === editingItemId && i.containerId === activeShortContainerId);
@@ -1076,7 +1123,7 @@
                     ...flatPayload
                 });
             }
-            addCategoryToDatalist(payload.itemCategory);
+            addCategoryToDatalist(flatPayload.category);
             closeItemModal();
             showSuccessToast('Item saved successfully to the local mock!');
             renderItemsTable();
@@ -1085,29 +1132,124 @@
 
         setLoading(btn, true);
         try {
+            // Step 1: Upload any pending item attachment files to S3.
+            const resolvedItemAtts = await resolveAttachments(currentItemAttachments);
+            const cleanedAttachments = resolvedItemAtts.map(att => ({
+                attachmentId: att.attachmentId || `att-${Date.now()}`,
+                filename: att.filename || att.label || "File Attachment",
+                fileUrl: att.fileUrl || att.s3Url || "",
+                label: att.filename || att.label || "File Attachment",
+                s3Url: att.fileUrl || att.s3Url || ""
+            }));
+
+            // Step 2: Save the item properties.
+            const payload = {
+                itemName: nameVal,
+                itemCategory: document.getElementById("itemCategory").value.trim() || "General",
+                itempurchasedFrom: document.getElementById("itemPurchasedFrom").value.trim() || "Unknown",
+                itempurchasePrice: Number(document.getElementById("itemPurchasePrice").value) || 0,
+                itempurchaseDate: document.getElementById("itemPurchaseDate").value || null,
+                itemwarrantyPeriod: document.getElementById("itemWarrantyExpiryDate").value || "1970-01-01",
+                itemphysicalPaperStorageLocation: document.getElementById("itemPhysicalLocation").value.trim(),
+                itemAttachments: cleanedAttachments
+            };
+
             let path = `${API}/containers/${activeShortContainerId}/items`;
             let method = "POST";
-            if (editingItemId) {
-                path += `/${editingItemId}`;
-                method = "PUT";
-            }
+            if (editingItemId) { path += `/${editingItemId}`; method = "PUT"; }
 
-            const response = await fetch(path, {
-                method,
-                headers: authHeaders(),
-                body: JSON.stringify(payload)
-            });
+            const response = await fetch(path, { method, headers: authHeaders(), body: JSON.stringify(payload) });
             if (!response.ok) throw new Error(`Rejection status: ${response.status}`);
 
-            // Fetch the updated dataset completely from AWS
+            // Step 3: Commit staged notes, parts, and queued deletions (existing items only).
+            if (editingItemId) {
+                const cid = activeShortContainerId;
+                const iid = editingItemId;
+                const cleanCid = String(cid).replace("CONTAINER#", "").trim();
+                const cleanIid = String(iid).replace("ITEM#", "").trim();
+
+                // New notes → POST
+                await Promise.all(currentItemNotes.filter(n => n._isNew).map(async note => {
+                    const atts = await resolveAttachments(note.attachments);
+                    const { _isNew, noteId, _modified, ...rest } = note;
+                    return fetch(`${API}/containers/${cid}/items/${iid}/notes`, {
+                        method: "POST", headers: authHeaders(),
+                        body: JSON.stringify({ ...rest, attachments: atts })
+                    }).catch(e => console.warn("Note commit failed:", e));
+                }));
+
+                // Modified existing notes → PUT
+                await Promise.all(currentItemNotes.filter(n => n._modified && !n._isNew).map(async note => {
+                    const atts = await resolveAttachments(note.attachments);
+                    const { _isNew, _modified, ...rest } = note;
+                    return fetch(`${API}/containers/${cid}/items/${iid}/notes/${note.noteId}`, {
+                        method: "PUT", headers: authHeaders(),
+                        body: JSON.stringify({ ...rest, attachments: atts })
+                    }).catch(e => console.warn("Note update failed:", e));
+                }));
+
+                // Deleted notes → cascade-delete attachments then DELETE record
+                await Promise.all(deletedNotes.map(async note => {
+                    if (Array.isArray(note.attachments)) {
+                        await Promise.all(note.attachments.map(a =>
+                            fetch(`${API}/attachments/delete`, {
+                                method: "POST", headers: authHeaders(),
+                                body: JSON.stringify({ pk: `CONTAINER#${cleanCid.toUpperCase()}`, sk: `NOTE#${iid}#${note.noteId}`, attachmentId: a.attachmentId })
+                            }).catch(() => {})
+                        ));
+                    }
+                    return fetch(`${API}/containers/${cid}/items/${iid}/notes/${note.noteId}`, {
+                        method: "DELETE", headers: authHeaders()
+                    }).catch(() => {});
+                }));
+
+                // New parts → POST
+                await Promise.all(currentItemParts.filter(p => p._isNew).map(async part => {
+                    const atts = await resolveAttachments(part.attachments);
+                    const { _isNew, partId, _modified, ...rest } = part;
+                    return fetch(`${API}/containers/${cid}/items/${iid}/parts`, {
+                        method: "POST", headers: authHeaders(),
+                        body: JSON.stringify({ ...rest, attachments: atts })
+                    }).catch(e => console.warn("Part commit failed:", e));
+                }));
+
+                // Modified existing parts → PUT
+                await Promise.all(currentItemParts.filter(p => p._modified && !p._isNew).map(async part => {
+                    const atts = await resolveAttachments(part.attachments);
+                    const { _isNew, _modified, ...rest } = part;
+                    return fetch(`${API}/containers/${cid}/items/${iid}/parts/${part.partId}`, {
+                        method: "PUT", headers: authHeaders(),
+                        body: JSON.stringify({ ...rest, attachments: atts })
+                    }).catch(e => console.warn("Part update failed:", e));
+                }));
+
+                // Deleted parts → cascade-delete attachments then DELETE record
+                await Promise.all(deletedParts.map(async part => {
+                    if (Array.isArray(part.attachments)) {
+                        await Promise.all(part.attachments.map(a =>
+                            fetch(`${API}/attachments/delete`, {
+                                method: "POST", headers: authHeaders(),
+                                body: JSON.stringify({ pk: `CONTAINER#${cleanCid.toUpperCase()}`, sk: `PART#${iid}#${part.partId}`, attachmentId: a.attachmentId })
+                            }).catch(() => {})
+                        ));
+                    }
+                    return fetch(`${API}/containers/${cid}/items/${iid}/parts/${part.partId}`, {
+                        method: "DELETE", headers: authHeaders()
+                    }).catch(() => {});
+                }));
+
+                // Deleted item attachments → remove from DB/S3
+                await Promise.all(deletedAttachmentIds.map(attId =>
+                    fetch(`${API}/attachments/delete`, {
+                        method: "POST", headers: authHeaders(),
+                        body: JSON.stringify({ pk: `CONTAINER#${cleanCid.toUpperCase()}`, sk: `ITEM#${cleanIid.toUpperCase()}`, attachmentId: attId })
+                    }).catch(() => {})
+                ));
+            }
+
             await loadItems();
-
             addCategoryToDatalist(payload.itemCategory);
-
-            // Close the form modal safely
             closeItemModal();
-
-            // alert("Item saved successfully to the database!");
             showSuccessToast('Item saved successfully to the database!');
 
         } catch (error) {
@@ -1424,117 +1566,40 @@ async function handleAttachmentUpload() {
     const file = fileInput.files[0];
     const displayNameInput = document.getElementById("attachmentDisplayName");
     const displayName = displayNameInput?.value.trim() || file.name;
-    fileInput.value = ""; // clear early so closeAttachmentForm won't re-trigger upload
+    fileInput.value = "";
     if (displayNameInput) displayNameInput.value = "";
 
-    if (progressStatus) {
-        progressStatus.style.display = "block";
-        progressStatus.innerText = "⏳ Processing file upload...";
-    }
-
-    setAttachmentUploadLock(true);
-
-    if (window.APP_CONFIG?.USE_MOCK) {
-        const localMockUrl = URL.createObjectURL(file);
-        currentItemAttachments.push({
-            attachmentId: "ATT#" + Date.now(),
-            label: displayName,
-            s3Url: localMockUrl,
-            name: displayName,
-            url: localMockUrl
-        });
-        renderAttachmentCards();
-        markItemFormDirty();
-        closeAttachmentForm();
-        if (progressStatus) progressStatus.style.display = "none";
-        fileInput.value = "";
-        showSuccessToast(`Staged local mock for "${displayName}"`);
-        return;
-    }
-
     try {
-        const fileToUpload = await checkAndPrepareFile(file, progressStatus);
-        if (!fileToUpload) return;
+        // Compress images if needed, then stage locally — S3 upload deferred to Ok press.
+        if (progressStatus) { progressStatus.style.display = "block"; progressStatus.innerText = "⏳ Processing..."; }
+        const fileToStage = window.APP_CONFIG?.USE_MOCK ? file : (await checkAndPrepareFile(file, progressStatus) || file);
 
-        if (progressStatus) progressStatus.innerText = "⏳ Contacting AWS S3 Storage Gateway...";
-
-        const _itemExt = fileToUpload.name.includes('.') ? '.' + fileToUpload.name.split('.').pop() : '';
-        const s3Filename = (_itemExt && !displayName.toLowerCase().endsWith(_itemExt.toLowerCase())) ? displayName + _itemExt : displayName;
-        const presignPath = `${API}/attachments/presign?filename=${encodeURIComponent(s3Filename)}&contentType=${encodeURIComponent(fileToUpload.type)}`;
-        const res = await fetch(presignPath, { headers: authHeaders() });
-        if (!res.ok) throw new Error("Failed getting secure token path.");
-
-        const { uploadUrl, fileUrl } = await res.json();
-
-        if (progressStatus) progressStatus.innerText = "⏳ Streaming file directly to S3...";
-
-        const uploadRes = await fetch(uploadUrl, {
-            method: "PUT",
-            headers: { "Content-Type": fileToUpload.type },
-            body: fileToUpload
+        const localUrl = URL.createObjectURL(fileToStage);
+        currentItemAttachments.push({
+            attachmentId: `att-pending-${Date.now()}`,
+            filename: displayName,
+            fileUrl: localUrl,
+            label: displayName,
+            s3Url: localUrl,
+            name: displayName,
+            url: localUrl,
+            _pendingFile: fileToStage,
+            _localUrl: localUrl,
+            _isNew: true
         });
-        if (!uploadRes.ok) throw new Error("S3 gateway rejected target asset payload stream.");
 
-        if (!editingItemId) {
-            // 💡 PATHWAY A: BRAND NEW ITEM
-            console.log("📝 Staging attachment locally until item creation is finalized.");
-
-            const stagedAttachment = {
-                attachmentId: `att-${Date.now()}`,
-                filename: displayName,
-                fileUrl: fileUrl,
-                label: displayName,
-                s3Url: fileUrl,
-                name: displayName,
-                url: fileUrl
-            };
-
-            currentItemAttachments.push(stagedAttachment);
-            renderAttachmentCards();
-            markItemFormDirty();
-            closeAttachmentForm();
-            showSuccessToast(`Staged "${displayName}"! Will save with item.`);
-
+        renderAttachmentCards();
+        closeAttachmentForm();
+        if (editingItemId) {
+            markCollectionsChanged();
         } else {
-            // 💡 PATHWAY B: EXISTING ITEM
-            if (progressStatus) progressStatus.innerText = "⏳ Logging file metadata to database...";
-
-            const cleanContainerId = String(activeShortContainerId).replace("CONTAINER#", "").trim();
-            const cleanItemId = String(editingItemId).replace("ITEM#", "").trim();
-
-            const dbPayload = {
-                pk: `CONTAINER#${cleanContainerId.toUpperCase()}`,
-                sk: `ITEM#${cleanItemId}`,
-                filename: displayName,
-                fileUrl: fileUrl
-            };
-
-            const dbRes = await fetch(`${API}/attachments`, {
-                method: "POST",
-                headers: { ...authHeaders(), "Content-Type": "application/json" },
-                body: JSON.stringify(dbPayload)
-            });
-
-            if (!dbRes.ok) throw new Error("Failed to link file to database row.");
-
-            const dbResult = await dbRes.json();
-            const rawAttachments = dbResult.attachments || [];
-
-            currentItemAttachments = rawAttachments.map(att => ({
-                ...att,
-                label: att.filename || att.label,
-                s3Url: att.fileUrl || att.s3Url
-            }));
-
-            renderAttachmentCards();
-            closeAttachmentForm();
-            showSuccessToast(`Uploaded "${displayName}" successfully!`);
+            markItemFormDirty();
         }
+        showSuccessToast(`"${displayName}" staged — will upload when you click Ok.`);
 
     } catch (err) {
-        showInfoPopup(`Attachment pipeline error: ${err.message}`);
+        showInfoPopup(`Attachment error: ${err.message}`);
     } finally {
-        setAttachmentUploadLock(false);
         if (progressStatus) progressStatus.style.display = "none";
         fileInput.value = "";
     }
@@ -1678,101 +1743,38 @@ function renderNoteAttachmentList() {
 }
 
 function removeNoteAttachmentFromState(idx) {
+    const att = currentNoteAttachments[idx];
+    if (att && att._localUrl) URL.revokeObjectURL(att._localUrl);
     currentNoteAttachments.splice(idx, 1);
     renderNoteAttachmentList();
 }
 
 async function handleNoteAttachmentUpload() {
     const fileInput = document.getElementById("noteFilePicker");
-    const progressStatus = document.getElementById("noteUploadProgress");
-
     if (!fileInput || !fileInput.files.length) {
         showInfoPopup("Please select a file first.");
         return false;
     }
-
     const file = fileInput.files[0];
     const noteDisplayNameInput = document.getElementById("noteAttachmentDisplayName");
-    const noteDisplayName = noteDisplayNameInput?.value.trim() || file.name;
+    const displayName = noteDisplayNameInput?.value.trim() || file.name;
     if (noteDisplayNameInput) noteDisplayNameInput.value = "";
-    if (progressStatus) { progressStatus.style.display = "block"; progressStatus.innerText = "⏳ Processing..."; }
+    fileInput.value = "";
 
-    if (window.APP_CONFIG?.USE_MOCK) {
-        const localUrl = URL.createObjectURL(file);
-        currentNoteAttachments.push({
-            attachmentId: "ATT#" + Date.now(),
-            filename: noteDisplayName,
-            fileUrl: localUrl,
-            label: noteDisplayName,
-            s3Url: localUrl
-        });
-        renderNoteAttachmentList();
-        if (progressStatus) progressStatus.style.display = "none";
-        fileInput.value = "";
-        showSuccessToast(`Staged "${noteDisplayName}" for note.`);
-        return true;
-    }
-
-    try {
-        const fileToUpload = await checkAndPrepareFile(file, progressStatus);
-        if (!fileToUpload) return false;
-
-        if (progressStatus) progressStatus.innerText = "⏳ Contacting AWS S3 Storage Gateway...";
-        const _noteExt = fileToUpload.name.includes('.') ? '.' + fileToUpload.name.split('.').pop() : '';
-        const noteS3Filename = (_noteExt && !noteDisplayName.toLowerCase().endsWith(_noteExt.toLowerCase())) ? noteDisplayName + _noteExt : noteDisplayName;
-        const presignPath = `${API}/attachments/presign?filename=${encodeURIComponent(noteS3Filename)}&contentType=${encodeURIComponent(fileToUpload.type)}`;
-        const res = await fetch(presignPath, { headers: authHeaders() });
-        if (!res.ok) throw new Error("Failed to get presigned URL.");
-        const { uploadUrl, fileUrl } = await res.json();
-
-        if (progressStatus) progressStatus.innerText = "⏳ Uploading to S3...";
-        const uploadRes = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": fileToUpload.type }, body: fileToUpload });
-        if (!uploadRes.ok) throw new Error("S3 upload failed.");
-
-        if (!editingNoteId) {
-            // New note: stage locally until note is saved
-            currentNoteAttachments.push({
-                attachmentId: `att-${Date.now()}`,
-                filename: noteDisplayName,
-                fileUrl,
-                label: noteDisplayName,
-                s3Url: fileUrl
-            });
-            renderNoteAttachmentList();
-            showSuccessToast(`Staged "${noteDisplayName}"! Will save with note.`);
-        } else {
-            // Existing note: persist attachment to DB immediately
-            if (progressStatus) progressStatus.innerText = "⏳ Logging metadata to database...";
-            const cleanContainerId = String(activeShortContainerId).replace("CONTAINER#", "").trim();
-            const dbPayload = {
-                pk: `CONTAINER#${cleanContainerId.toUpperCase()}`,
-                sk: `NOTE#${editingItemId}#${editingNoteId}`,
-                filename: noteDisplayName,
-                fileUrl
-            };
-            const dbRes = await fetch(`${API}/attachments`, {
-                method: "POST",
-                headers: { ...authHeaders(), "Content-Type": "application/json" },
-                body: JSON.stringify(dbPayload)
-            });
-            if (!dbRes.ok) throw new Error("Failed to link file to note record.");
-            const dbResult = await dbRes.json();
-            currentNoteAttachments = (dbResult.attachments || []).map(a => ({
-                ...a,
-                label: a.filename || a.label,
-                s3Url: a.fileUrl || a.s3Url
-            }));
-            renderNoteAttachmentList();
-            showSuccessToast(`Uploaded "${noteDisplayName}" to note!`);
-        }
-        return true;
-    } catch (err) {
-        showInfoPopup(`Note attachment error: ${err.message}`);
-        return false;
-    } finally {
-        if (progressStatus) progressStatus.style.display = "none";
-        fileInput.value = "";
-    }
+    // Stage locally — S3 upload deferred to Ok press.
+    const localUrl = URL.createObjectURL(file);
+    currentNoteAttachments.push({
+        attachmentId: `att-pending-${Date.now()}`,
+        filename: displayName,
+        label: displayName,
+        fileUrl: localUrl,
+        s3Url: localUrl,
+        _pendingFile: file,
+        _localUrl: localUrl
+    });
+    renderNoteAttachmentList();
+    showSuccessToast(`"${displayName}" staged — will upload when you click Ok.`);
+    return true;
 }
 
 async function saveNote(btn = null) {
@@ -1781,71 +1783,36 @@ async function saveNote(btn = null) {
 
     const noteFilePicker = document.getElementById("noteFilePicker");
     if (noteFilePicker && noteFilePicker.files.length > 0) {
-        const uploaded = await handleNoteAttachmentUpload();
-        if (!uploaded) return;
+        const staged = await handleNoteAttachmentUpload();
+        if (!staged) return;
     }
 
     const date = document.getElementById("noteDate").value || new Date().toISOString().split("T")[0];
+    // Preserve _pendingFile/_localUrl so files upload correctly on Ok press.
+    const stagedAttachments = currentNoteAttachments.map(att => ({ ...att }));
+    const wasNew = !editingNoteId;
 
-    const cleanedAttachments = currentNoteAttachments.map(att => ({
-        attachmentId: att.attachmentId || `att-${Date.now()}`,
-        filename: att.filename || att.label || "File",
-        label: att.filename || att.label || "File",
-        fileUrl: att.fileUrl || att.s3Url || "",
-        uploadedAt: att.uploadedAt || new Date().toISOString()
-    }));
-
-    const payload = { description, date, attachments: cleanedAttachments };
-
-    if (window.APP_CONFIG?.USE_MOCK) {
-        if (editingNoteId) {
-            const idx = currentItemNotes.findIndex(n => n.noteId === editingNoteId);
-            if (idx !== -1) Object.assign(currentItemNotes[idx], payload);
-        } else {
-            const generatedNoteId = "NOTE" + Date.now();
-            currentItemNotes.push({
-                PK: `CONTAINER#${activeShortContainerId}`,
-                SK: `NOTE#${editingItemId}#${generatedNoteId}`,
-                entityType: "NOTE",
-                containerId: activeShortContainerId,
-                itemId: editingItemId,
-                noteId: generatedNoteId,
-                createdDate: new Date().toISOString().split("T")[0],
-                ...payload
-            });
-        }
-        closeNoteForm();
-        renderNotesSection();
-        syncNoteCountCell();
-        showSuccessToast("Note saved!");
-        return;
-    }
-
-    setLoading(btn, true);
-    try {
-        let path = `${API}/containers/${activeShortContainerId}/items/${editingItemId}/notes`;
-        let method = "POST";
-        if (editingNoteId) {
-            path += `/${editingNoteId}`;
-            method = "PUT";
-        }
-
-        const res = await fetch(path, {
-            method,
-            headers: authHeaders(),
-            body: JSON.stringify(payload)
+    if (editingNoteId) {
+        const idx = currentItemNotes.findIndex(n => n.noteId === editingNoteId);
+        if (idx !== -1) Object.assign(currentItemNotes[idx], { description, date, attachments: stagedAttachments, _modified: true });
+    } else {
+        currentItemNotes.push({
+            noteId: `PENDING#${Date.now()}`,
+            containerId: activeShortContainerId,
+            itemId: editingItemId,
+            entityType: "NOTE",
+            description,
+            date,
+            attachments: stagedAttachments,
+            _isNew: true
         });
-        if (!res.ok) throw new Error(`Status: ${res.status}`);
-
-        closeNoteForm();
-        await loadNotes();
-        syncNoteCountCell();
-        showSuccessToast("Note saved successfully!");
-    } catch (err) {
-        showInfoPopup(`Failed to save note: ${err.message}`);
-    } finally {
-        setLoading(btn, false);
     }
+
+    closeNoteForm();
+    renderNotesSection();
+    syncNoteCountCell();
+    markCollectionsChanged();
+    showSuccessToast(wasNew ? "Note added — click Ok to save." : "Note updated — click Ok to save.");
 }
 
 function confirmDeleteNote(noteId) {
@@ -1855,42 +1822,15 @@ function confirmDeleteNote(noteId) {
 }
 
 async function finalizeNoteDelete(noteId) {
-    if (window.APP_CONFIG?.USE_MOCK) {
-        currentItemNotes = currentItemNotes.filter(n => n.noteId !== noteId);
-        renderNotesSection();
-        syncNoteCountCell();
-        showSuccessToast("Note deleted.");
-        return;
-    }
-
-    try {
-        // Remove note attachments from S3 before deleting the note record
-        const note = currentItemNotes.find(n => n.noteId === noteId);
-        if (note && Array.isArray(note.attachments) && note.attachments.length > 0) {
-            await Promise.all(note.attachments.map(att =>
-                fetch(`${API}/attachments/delete`, {
-                    method: "POST",
-                    headers: authHeaders(),
-                    body: JSON.stringify({
-                        pk: `CONTAINER#${activeShortContainerId.toUpperCase()}`,
-                        sk: `NOTE#${editingItemId}#${noteId}`,
-                        attachmentId: att.attachmentId
-                    })
-                }).catch(e => console.warn("Could not delete note attachment:", e))
-            ));
-        }
-
-        const res = await fetch(
-            `${API}/containers/${activeShortContainerId}/items/${editingItemId}/notes/${noteId}`,
-            { method: "DELETE", headers: authHeaders() }
-        );
-        if (!res.ok) throw new Error(`Status: ${res.status}`);
-        await loadNotes();
-        syncNoteCountCell();
-        showSuccessToast("Note deleted successfully.");
-    } catch (err) {
-        showInfoPopup(`Failed to delete note: ${err.message}`);
-    }
+    const note = currentItemNotes.find(n => n.noteId === noteId);
+    if (!note) return;
+    // Existing DB notes are queued for deletion on Ok; new staged notes are just discarded.
+    if (!note._isNew) deletedNotes.push(note);
+    currentItemNotes = currentItemNotes.filter(n => n.noteId !== noteId);
+    renderNotesSection();
+    syncNoteCountCell();
+    markCollectionsChanged();
+    showSuccessToast("Note removed — click Ok to save.");
 }
 
 // ==========================================
@@ -2031,101 +1971,38 @@ function renderPartAttachmentList() {
 }
 
 function removePartAttachmentFromState(idx) {
+    const att = currentPartAttachments[idx];
+    if (att && att._localUrl) URL.revokeObjectURL(att._localUrl);
     currentPartAttachments.splice(idx, 1);
     renderPartAttachmentList();
 }
 
 async function handlePartAttachmentUpload() {
     const fileInput = document.getElementById("partFilePicker");
-    const progressStatus = document.getElementById("partUploadProgress");
-
     if (!fileInput || !fileInput.files.length) {
         showInfoPopup("Please select a file first.");
         return false;
     }
-
     const file = fileInput.files[0];
     const partDisplayNameInput = document.getElementById("partAttachmentDisplayName");
-    const partDisplayName = partDisplayNameInput?.value.trim() || file.name;
+    const displayName = partDisplayNameInput?.value.trim() || file.name;
     if (partDisplayNameInput) partDisplayNameInput.value = "";
-    if (progressStatus) { progressStatus.style.display = "block"; progressStatus.innerText = "⏳ Processing..."; }
+    fileInput.value = "";
 
-    if (window.APP_CONFIG?.USE_MOCK) {
-        const localUrl = URL.createObjectURL(file);
-        currentPartAttachments.push({
-            attachmentId: "ATT#" + Date.now(),
-            filename: partDisplayName,
-            fileUrl: localUrl,
-            label: partDisplayName,
-            s3Url: localUrl
-        });
-        renderPartAttachmentList();
-        if (progressStatus) progressStatus.style.display = "none";
-        fileInput.value = "";
-        showSuccessToast(`Staged "${partDisplayName}" for part.`);
-        return true;
-    }
-
-    try {
-        const fileToUpload = await checkAndPrepareFile(file, progressStatus);
-        if (!fileToUpload) return false;
-
-        if (progressStatus) progressStatus.innerText = "⏳ Contacting AWS S3 Storage Gateway...";
-        const _partExt = fileToUpload.name.includes('.') ? '.' + fileToUpload.name.split('.').pop() : '';
-        const partS3Filename = (_partExt && !partDisplayName.toLowerCase().endsWith(_partExt.toLowerCase())) ? partDisplayName + _partExt : partDisplayName;
-        const presignPath = `${API}/attachments/presign?filename=${encodeURIComponent(partS3Filename)}&contentType=${encodeURIComponent(fileToUpload.type)}`;
-        const res = await fetch(presignPath, { headers: authHeaders() });
-        if (!res.ok) throw new Error("Failed to get presigned URL.");
-        const { uploadUrl, fileUrl } = await res.json();
-
-        if (progressStatus) progressStatus.innerText = "⏳ Uploading to S3...";
-        const uploadRes = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": fileToUpload.type }, body: fileToUpload });
-        if (!uploadRes.ok) throw new Error("S3 upload failed.");
-
-        if (!editingPartId) {
-            // New part: stage locally until part is saved
-            currentPartAttachments.push({
-                attachmentId: `att-${Date.now()}`,
-                filename: partDisplayName,
-                fileUrl,
-                label: partDisplayName,
-                s3Url: fileUrl
-            });
-            renderPartAttachmentList();
-            showSuccessToast(`Staged "${partDisplayName}"! Will save with part.`);
-        } else {
-            // Existing part: persist attachment to DB immediately
-            if (progressStatus) progressStatus.innerText = "⏳ Logging metadata to database...";
-            const cleanContainerId = String(activeShortContainerId).replace("CONTAINER#", "").trim();
-            const dbPayload = {
-                pk: `CONTAINER#${cleanContainerId.toUpperCase()}`,
-                sk: `PART#${editingItemId}#${editingPartId}`,
-                filename: partDisplayName,
-                fileUrl
-            };
-            const dbRes = await fetch(`${API}/attachments`, {
-                method: "POST",
-                headers: { ...authHeaders(), "Content-Type": "application/json" },
-                body: JSON.stringify(dbPayload)
-            });
-            if (!dbRes.ok) throw new Error("Failed to link file to part record.");
-            const dbResult = await dbRes.json();
-            currentPartAttachments = (dbResult.attachments || []).map(a => ({
-                ...a,
-                label: a.filename || a.label,
-                s3Url: a.fileUrl || a.s3Url
-            }));
-            renderPartAttachmentList();
-            showSuccessToast(`Uploaded "${partDisplayName}" to part!`);
-        }
-        return true;
-    } catch (err) {
-        showInfoPopup(`Part attachment error: ${err.message}`);
-        return false;
-    } finally {
-        if (progressStatus) progressStatus.style.display = "none";
-        fileInput.value = "";
-    }
+    // Stage locally — S3 upload deferred to Ok press.
+    const localUrl = URL.createObjectURL(file);
+    currentPartAttachments.push({
+        attachmentId: `att-pending-${Date.now()}`,
+        filename: displayName,
+        label: displayName,
+        fileUrl: localUrl,
+        s3Url: localUrl,
+        _pendingFile: file,
+        _localUrl: localUrl
+    });
+    renderPartAttachmentList();
+    showSuccessToast(`"${displayName}" staged — will upload when you click Ok.`);
+    return true;
 }
 
 async function savePart(btn = null) {
@@ -2134,76 +2011,42 @@ async function savePart(btn = null) {
 
     const partFilePicker = document.getElementById("partFilePicker");
     if (partFilePicker && partFilePicker.files.length > 0) {
-        const uploaded = await handlePartAttachmentUpload();
-        if (!uploaded) return;
+        const staged = await handlePartAttachmentUpload();
+        if (!staged) return;
     }
 
-    const cleanedAttachments = currentPartAttachments.map(att => ({
-        attachmentId: att.attachmentId || `att-${Date.now()}`,
-        filename: att.filename || att.label || "File",
-        label: att.filename || att.label || "File",
-        fileUrl: att.fileUrl || att.s3Url || "",
-        uploadedAt: att.uploadedAt || new Date().toISOString()
-    }));
+    // Preserve _pendingFile/_localUrl so files upload correctly on Ok press.
+    const stagedAttachments = currentPartAttachments.map(att => ({ ...att }));
+    const wasNew = !editingPartId;
 
-    const payload = {
+    const partData = {
         name,
         purchaseDate: document.getElementById("partPurchaseDate").value || null,
         cost: document.getElementById("partCost").value !== "" ? Number(document.getElementById("partCost").value) : null,
         purchasedFrom: document.getElementById("partPurchasedFrom").value.trim() || null,
         warrantyPeriod: document.getElementById("partWarrantyPeriod").value.trim() || null,
-        attachments: cleanedAttachments
+        attachments: stagedAttachments
     };
 
-    if (window.APP_CONFIG?.USE_MOCK) {
-        if (editingPartId) {
-            const idx = currentItemParts.findIndex(p => p.partId === editingPartId);
-            if (idx !== -1) Object.assign(currentItemParts[idx], payload);
-        } else {
-            const generatedPartId = "PART" + Date.now();
-            currentItemParts.push({
-                PK: `CONTAINER#${activeShortContainerId}`,
-                SK: `PART#${editingItemId}#${generatedPartId}`,
-                entityType: "PART",
-                containerId: activeShortContainerId,
-                itemId: editingItemId,
-                partId: generatedPartId,
-                createdDate: new Date().toISOString().split("T")[0],
-                ...payload
-            });
-        }
-        closePartForm();
-        renderPartsSection();
-        syncPartCountCell();
-        showSuccessToast("Part saved!");
-        return;
-    }
-
-    setLoading(btn, true);
-    try {
-        let path = `${API}/containers/${activeShortContainerId}/items/${editingItemId}/parts`;
-        let method = "POST";
-        if (editingPartId) {
-            path += `/${editingPartId}`;
-            method = "PUT";
-        }
-
-        const res = await fetch(path, {
-            method,
-            headers: authHeaders(),
-            body: JSON.stringify(payload)
+    if (editingPartId) {
+        const idx = currentItemParts.findIndex(p => p.partId === editingPartId);
+        if (idx !== -1) Object.assign(currentItemParts[idx], { ...partData, _modified: true });
+    } else {
+        currentItemParts.push({
+            partId: `PENDING#${Date.now()}`,
+            containerId: activeShortContainerId,
+            itemId: editingItemId,
+            entityType: "PART",
+            ...partData,
+            _isNew: true
         });
-        if (!res.ok) throw new Error(`Status: ${res.status}`);
-
-        closePartForm();
-        await loadParts();
-        syncPartCountCell();
-        showSuccessToast("Part saved successfully!");
-    } catch (err) {
-        showInfoPopup(`Failed to save part: ${err.message}`);
-    } finally {
-        setLoading(btn, false);
     }
+
+    closePartForm();
+    renderPartsSection();
+    syncPartCountCell();
+    markCollectionsChanged();
+    showSuccessToast(wasNew ? "Part added — click Ok to save." : "Part updated — click Ok to save.");
 }
 
 function confirmDeletePart(partId) {
@@ -2213,42 +2056,15 @@ function confirmDeletePart(partId) {
 }
 
 async function finalizePartDelete(partId) {
-    if (window.APP_CONFIG?.USE_MOCK) {
-        currentItemParts = currentItemParts.filter(p => p.partId !== partId);
-        renderPartsSection();
-        syncPartCountCell();
-        showSuccessToast("Part deleted.");
-        return;
-    }
-
-    try {
-        // Remove part attachments from S3 before deleting the part record
-        const part = currentItemParts.find(p => p.partId === partId);
-        if (part && Array.isArray(part.attachments) && part.attachments.length > 0) {
-            await Promise.all(part.attachments.map(att =>
-                fetch(`${API}/attachments/delete`, {
-                    method: "POST",
-                    headers: authHeaders(),
-                    body: JSON.stringify({
-                        pk: `CONTAINER#${activeShortContainerId.toUpperCase()}`,
-                        sk: `PART#${editingItemId}#${partId}`,
-                        attachmentId: att.attachmentId
-                    })
-                }).catch(e => console.warn("Could not delete part attachment:", e))
-            ));
-        }
-
-        const res = await fetch(
-            `${API}/containers/${activeShortContainerId}/items/${editingItemId}/parts/${partId}`,
-            { method: "DELETE", headers: authHeaders() }
-        );
-        if (!res.ok) throw new Error(`Status: ${res.status}`);
-        await loadParts();
-        syncPartCountCell();
-        showSuccessToast("Part deleted successfully.");
-    } catch (err) {
-        showInfoPopup(`Failed to delete part: ${err.message}`);
-    }
+    const part = currentItemParts.find(p => p.partId === partId);
+    if (!part) return;
+    // Existing DB parts are queued for deletion on Ok; new staged parts are just discarded.
+    if (!part._isNew) deletedParts.push(part);
+    currentItemParts = currentItemParts.filter(p => p.partId !== partId);
+    renderPartsSection();
+    syncPartCountCell();
+    markCollectionsChanged();
+    showSuccessToast("Part removed — click Ok to save.");
 }
 
 // ==========================================

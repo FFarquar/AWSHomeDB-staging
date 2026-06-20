@@ -206,11 +206,13 @@
                 <div style="background:#fff; padding:8px; border-radius:4px; border:1px solid #e0e0e0;">
                     <input type="file" id="noteFilePicker" accept="image/*,application/pdf" style="width:100%;" />
                 </div>
-                <label style="display:block; font-size:12px; color:#555; margin-top:6px; margin-bottom:2px;">Rename attachment before uploading (optional)</label>
-                <input type="text" id="noteAttachmentDisplayName" placeholder="e.g. Warranty Card" style="width:100%; box-sizing:border-box; padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:12px;" />
+                <div id="noteRenameRow" style="display:none;">
+                    <label style="display:block; font-size:12px; color:#555; margin-top:6px; margin-bottom:2px;">Rename attachment before uploading (optional)</label>
+                    <input type="text" id="noteAttachmentDisplayName" placeholder="e.g. Warranty Card" style="width:100%; box-sizing:border-box; padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:12px;" />
+                </div>
                 <div id="noteUploadProgress" style="display:none; font-size:11px; color:#666; font-style:italic; margin-top:4px;">⏳ Uploading...</div>
                 <ul id="noteAttachmentList" class="attachment-list" style="padding-left:20px; margin-top:8px; max-height:80px; overflow-y:auto;"></ul>
-                <button type="button" onclick="handleNoteAttachmentUpload()" style="margin-top:8px; padding:6px 14px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Upload</button>
+                <button type="button" id="noteUploadBtn" onclick="handleNoteAttachmentUpload()" style="display:none; margin-top:8px; padding:6px 14px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Upload</button>
             </div>
 
             <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
@@ -254,11 +256,13 @@
                 <div style="background:#fff; padding:8px; border-radius:4px; border:1px solid #e0e0e0;">
                     <input type="file" id="partFilePicker" accept="image/*,application/pdf" style="width:100%;" />
                 </div>
-                <label style="display:block; font-size:12px; color:#555; margin-top:6px; margin-bottom:2px;">Rename attachment before uploading (optional)</label>
-                <input type="text" id="partAttachmentDisplayName" placeholder="e.g. Warranty Card" style="width:100%; box-sizing:border-box; padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:12px;" />
+                <div id="partRenameRow" style="display:none;">
+                    <label style="display:block; font-size:12px; color:#555; margin-top:6px; margin-bottom:2px;">Rename attachment before uploading (optional)</label>
+                    <input type="text" id="partAttachmentDisplayName" placeholder="e.g. Warranty Card" style="width:100%; box-sizing:border-box; padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:12px;" />
+                </div>
                 <div id="partUploadProgress" style="display:none; font-size:11px; color:#666; font-style:italic; margin-top:4px;">⏳ Uploading...</div>
                 <ul id="partAttachmentList" class="attachment-list" style="padding-left:20px; margin-top:8px; max-height:80px; overflow-y:auto;"></ul>
-                <button type="button" onclick="handlePartAttachmentUpload()" style="margin-top:8px; padding:6px 14px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Upload</button>
+                <button type="button" id="partUploadBtn" onclick="handlePartAttachmentUpload()" style="display:none; margin-top:8px; padding:6px 14px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Upload</button>
             </div>
 
             <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
@@ -280,10 +284,12 @@
                 <div style="background:#fff; padding:8px; border-radius:4px; border:1px solid #e0e0e0;">
                     <input type="file" id="itemFilePicker" accept="image/*,application/pdf" style="width:100%;" />
                 </div>
-                <label style="display:block; font-size:12px; color:#555; margin-top:6px; margin-bottom:2px;">Rename attachment before uploading (optional)</label>
-                <input type="text" id="attachmentDisplayName" placeholder="e.g. Warranty Card" style="width:100%; box-sizing:border-box; padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:12px;" />
+                <div id="attachmentRenameRow" style="display:none;">
+                    <label style="display:block; font-size:12px; color:#555; margin-top:6px; margin-bottom:2px;">Rename attachment before uploading (optional)</label>
+                    <input type="text" id="attachmentDisplayName" placeholder="e.g. Warranty Card" style="width:100%; box-sizing:border-box; padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:12px;" />
+                </div>
                 <div id="uploadProgressBar" style="display:none; font-size:11px; color:#666; font-style:italic; margin-top:4px;">⏳ Contacting AWS S3 Storage Gateway...</div>
-                <button type="button" id="attachmentUploadBtn" onclick="handleAttachmentUpload()" style="margin-top:8px; padding:6px 14px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Upload</button>
+                <button type="button" id="attachmentUploadBtn" onclick="handleAttachmentUpload()" style="display:none; margin-top:8px; padding:6px 14px; background:#0073bb; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Upload</button>
             </div>
             <div id="attachmentCurrentFile" style="display:none; margin-top:10px; font-size:13px;"></div>
 

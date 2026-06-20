@@ -125,6 +125,24 @@
         });
         updateItemModalButtons();
 
+        // Show rename row + upload button only when a file is chosen; hide again after upload
+        [
+            ["noteFilePicker", "noteRenameRow", "noteUploadBtn"],
+            ["partFilePicker", "partRenameRow", "partUploadBtn"],
+            ["itemFilePicker", "attachmentRenameRow", "attachmentUploadBtn"]
+        ].forEach(([pickerId, rowId, btnId]) => {
+            const picker = document.getElementById(pickerId);
+            const row = document.getElementById(rowId);
+            const btn = document.getElementById(btnId);
+            if (picker) {
+                picker.addEventListener("change", () => {
+                    const hasFile = !!picker.files.length;
+                    if (row) row.style.display = hasFile ? "" : "none";
+                    if (btn) btn.style.display = hasFile ? "" : "none";
+                });
+            }
+        });
+
         history.replaceState({ view: 'app' }, '');
         history.pushState({ view: 'app' }, '');
         window.addEventListener('popstate', handlePopState);
@@ -1046,6 +1064,8 @@
         document.getElementById("attachmentCurrentFile").style.display = "none";
         const btnDel = document.getElementById("btnDeleteAttachmentInForm");
         if (btnDel) btnDel.style.display = "none";
+        const _arr = document.getElementById("attachmentRenameRow"); if (_arr) _arr.style.display = "none";
+        const _aub = document.getElementById("attachmentUploadBtn"); if (_aub) _aub.style.display = "none";
         document.getElementById("attachmentModal").style.display = "flex";
     }
 
@@ -1602,6 +1622,8 @@ async function handleAttachmentUpload() {
     } finally {
         if (progressStatus) progressStatus.style.display = "none";
         fileInput.value = "";
+        const _arr = document.getElementById("attachmentRenameRow"); if (_arr) _arr.style.display = "none";
+        const _aub = document.getElementById("attachmentUploadBtn"); if (_aub) _aub.style.display = "none";
     }
 }
 
@@ -1693,6 +1715,9 @@ function openAddNote() {
     renderNoteAttachmentList();
     const btnDel = document.getElementById("btnDeleteNoteInForm");
     if (btnDel) btnDel.style.display = "none";
+    const _nfp = document.getElementById("noteFilePicker"); if (_nfp) _nfp.value = "";
+    const _nrr = document.getElementById("noteRenameRow"); if (_nrr) _nrr.style.display = "none";
+    const _nub = document.getElementById("noteUploadBtn"); if (_nub) _nub.style.display = "none";
     document.getElementById("noteModal").style.display = "flex";
 }
 
@@ -1709,6 +1734,9 @@ function openEditNote(noteId) {
     renderNoteAttachmentList();
     const btnDel = document.getElementById("btnDeleteNoteInForm");
     if (btnDel) btnDel.style.display = "inline-block";
+    const _nfp2 = document.getElementById("noteFilePicker"); if (_nfp2) _nfp2.value = "";
+    const _nrr2 = document.getElementById("noteRenameRow"); if (_nrr2) _nrr2.style.display = "none";
+    const _nub2 = document.getElementById("noteUploadBtn"); if (_nub2) _nub2.style.display = "none";
     document.getElementById("noteModal").style.display = "flex";
 }
 
@@ -1774,6 +1802,8 @@ async function handleNoteAttachmentUpload() {
     });
     renderNoteAttachmentList();
     showSuccessToast(`"${displayName}" staged — will upload when you click Ok.`);
+    const _nrr = document.getElementById("noteRenameRow"); if (_nrr) _nrr.style.display = "none";
+    const _nub = document.getElementById("noteUploadBtn"); if (_nub) _nub.style.display = "none";
     return true;
 }
 
@@ -1918,6 +1948,9 @@ function openAddPart() {
     renderPartAttachmentList();
     const btnDel = document.getElementById("btnDeletePartInForm");
     if (btnDel) btnDel.style.display = "none";
+    const _pfp = document.getElementById("partFilePicker"); if (_pfp) _pfp.value = "";
+    const _prr = document.getElementById("partRenameRow"); if (_prr) _prr.style.display = "none";
+    const _pub = document.getElementById("partUploadBtn"); if (_pub) _pub.style.display = "none";
     document.getElementById("partModal").style.display = "flex";
 }
 
@@ -1937,6 +1970,9 @@ function openEditPart(partId) {
     renderPartAttachmentList();
     const btnDel = document.getElementById("btnDeletePartInForm");
     if (btnDel) btnDel.style.display = "inline-block";
+    const _pfp2 = document.getElementById("partFilePicker"); if (_pfp2) _pfp2.value = "";
+    const _prr2 = document.getElementById("partRenameRow"); if (_prr2) _prr2.style.display = "none";
+    const _pub2 = document.getElementById("partUploadBtn"); if (_pub2) _pub2.style.display = "none";
     document.getElementById("partModal").style.display = "flex";
 }
 
@@ -2002,6 +2038,8 @@ async function handlePartAttachmentUpload() {
     });
     renderPartAttachmentList();
     showSuccessToast(`"${displayName}" staged — will upload when you click Ok.`);
+    const _prr = document.getElementById("partRenameRow"); if (_prr) _prr.style.display = "none";
+    const _pub = document.getElementById("partUploadBtn"); if (_pub) _pub.style.display = "none";
     return true;
 }
 

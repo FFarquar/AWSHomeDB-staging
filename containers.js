@@ -7,7 +7,7 @@
     }
 
     const API = window.APP_CONFIG.API_BASE_URL;
-    let token = localStorage.getItem("authToken");
+    let token = localStorage.getItem(window.authStorageKey("authToken"));
 
     if (!window.APP_CONFIG?.USE_MOCK) {
         if (!token) window.location.href = "login.html";
@@ -74,7 +74,7 @@
     let activeShortContainerId = null; // Tracks active parent container (short form ID)
     let activeContainerPK = null;      // Tracks active parent container full PK for edit/delete
 
-    const userRole = localStorage.getItem("userRole") || "USER";
+    const userRole = localStorage.getItem(window.authStorageKey("userRole")) || "USER";
     
     // 🔐 NEW PERMISSION STRUCTURE
     const isAdmin = userRole === "ADMIN";                                 // Container access
@@ -184,13 +184,18 @@
     function authHeaders() {
         return {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("authToken")}`
+            "Authorization": `Bearer ${localStorage.getItem(window.authStorageKey("authToken"))}`
         };
     }
 
     function checkAuthResponse(res) {
         if (res.status === 401 || res.status === 403) {
-            localStorage.clear();
+            // Only clear this environment's keys — localStorage.clear() would also
+            // wipe the other environment's session if both are open in tabs.
+            localStorage.removeItem(window.authStorageKey("authToken"));
+            localStorage.removeItem(window.authStorageKey("token"));
+            localStorage.removeItem(window.authStorageKey("userRole"));
+            localStorage.removeItem(window.authStorageKey("userLoginID"));
             window.location.href = "login.html";
             return false;
         }
@@ -1475,7 +1480,12 @@
     }
 
     function logout() {
-        localStorage.clear();
+        // Only clear this environment's keys — localStorage.clear() would also
+        // wipe the other environment's session if both are open in tabs.
+        localStorage.removeItem(window.authStorageKey("authToken"));
+        localStorage.removeItem(window.authStorageKey("token"));
+        localStorage.removeItem(window.authStorageKey("userRole"));
+        localStorage.removeItem(window.authStorageKey("userLoginID"));
         window.location.href = "login.html";
     }
 
@@ -2153,7 +2163,7 @@ function renderAdminUsers(users) {
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    const currentLoginID = localStorage.getItem("userLoginID") || "";
+    const currentLoginID = localStorage.getItem(window.authStorageKey("userLoginID")) || "";
 
     if (users.length === 0) {
         tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#888;">No users found.</td></tr>`;

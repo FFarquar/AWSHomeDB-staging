@@ -96,10 +96,10 @@
                 console.log(`✅ MOCK USER IDENTIFIED: ${matchedUser.loginID} [Role: ${matchedUser.role}]`);
 
                 // 4. Save your tokens and roles identically to the cloud model
-                localStorage.setItem('authToken', 'mock-token-abc-123');
-                localStorage.setItem('token', 'mock-token-abc-123');
-                localStorage.setItem('userRole', matchedUser.role); // 👈 FIXED: Saves mock user level
-                localStorage.setItem('userLoginID', matchedUser.loginID);
+                localStorage.setItem(window.authStorageKey('authToken'), 'mock-token-abc-123');
+                localStorage.setItem(window.authStorageKey('token'), 'mock-token-abc-123');
+                localStorage.setItem(window.authStorageKey('userRole'), matchedUser.role); // 👈 FIXED: Saves mock user level
+                localStorage.setItem(window.authStorageKey('userLoginID'), matchedUser.loginID);
 
                 window.location.href = 'containers.html';
                 return;
@@ -126,12 +126,12 @@
             }
 
             // Save token under multiple keys to match future dashboard page scripting hooks
-            localStorage.setItem('authToken', data.accessToken || data.token);
-            localStorage.setItem('token', data.accessToken || data.token);
-            
+            localStorage.setItem(window.authStorageKey('authToken'), data.accessToken || data.token);
+            localStorage.setItem(window.authStorageKey('token'), data.accessToken || data.token);
+
             // 🚀 FIXED FOR PRODUCTION: Extracts and saves the live role from login.mjs
-            localStorage.setItem('userRole', data.role || 'USER');
-            localStorage.setItem('userLoginID', username);
+            localStorage.setItem(window.authStorageKey('userRole'), data.role || 'USER');
+            localStorage.setItem(window.authStorageKey('userLoginID'), username);
 
             window.location.href = 'containers.html';
 

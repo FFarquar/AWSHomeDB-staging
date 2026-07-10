@@ -470,6 +470,15 @@
         </div>
     </div>
 
+    <!-- App Update Banner -->
+    <div id="swUpdateBanner" style="display:none; position:fixed; bottom:0; left:0; right:0; background:#232f3e; color:white; padding:12px 16px; align-items:center; justify-content:space-between; gap:12px; z-index:9999; box-shadow:0 -2px 8px rgba(0,0,0,0.4);">
+        <span style="font-size:14px;">A new version is available</span>
+        <div style="display:flex; gap:8px; flex-shrink:0;">
+            <button id="btnSwRefresh" style="background:#ff9900; color:white; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:13px; min-height:unset;">Refresh</button>
+            <button id="btnSwDismiss" style="background:transparent; color:#ccc; border:1px solid #555; padding:8px 12px; border-radius:6px; cursor:pointer; font-size:13px; min-height:unset;">Later</button>
+        </div>
+    </div>
+
     <script src="containers.js"></script>
     <script>
         (function () {
@@ -507,10 +516,47 @@
 
         // Service Worker registration
         if ('serviceWorker' in navigator) {
+            var swRegistration = null;
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('./sw.js')
+                    .then(function (reg) { swRegistration = reg; })
                     .catch(function (err) { console.warn('SW registration failed:', err); });
             });
+
+            // Installed (standalone) PWA windows can stay open for a whole
+            // work session without ever navigating again, so the browser's
+            // passive/throttled update check may not run for a long time.
+            // Force a check whenever the app regains focus/visibility.
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible' && swRegistration) {
+                    swRegistration.update().catch(function () {});
+                }
+            });
+            window.addEventListener('focus', function () {
+                if (swRegistration) swRegistration.update().catch(function () {});
+            });
+
+            // This page can have unsaved staged notes/parts/attachments, so
+            // don't auto-reload when a new SW takes over — just prompt.
+            // (sw.js calls skipWaiting()/clients.claim() itself, so by the
+            // time controllerchange fires the new SW is already in control;
+            // "Refresh" here just reloads this page to pick it up.)
+            navigator.serviceWorker.addEventListener('controllerchange', function () {
+                var banner = document.getElementById('swUpdateBanner');
+                if (banner) banner.style.display = 'flex';
+            });
+            var btnSwRefresh = document.getElementById('btnSwRefresh');
+            if (btnSwRefresh) {
+                btnSwRefresh.addEventListener('click', function () {
+                    window.location.reload();
+                });
+            }
+            var btnSwDismiss = document.getElementById('btnSwDismiss');
+            if (btnSwDismiss) {
+                btnSwDismiss.addEventListener('click', function () {
+                    document.getElementById('swUpdateBanner').style.display = 'none';
+                });
+            }
         }
     </script>
 </body>

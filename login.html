@@ -161,9 +161,33 @@
 
 <script>
     if ('serviceWorker' in navigator) {
+        var swRegistration = null;
         window.addEventListener('load', function () {
             navigator.serviceWorker.register('./sw.js')
+                .then(function (reg) { swRegistration = reg; })
                 .catch(function (err) { console.warn('SW registration failed:', err); });
+        });
+
+        // Installed (standalone) PWA windows can stay open for a whole work
+        // session without ever navigating again, so the browser's passive/
+        // throttled update check may not run for a long time. Force a check
+        // whenever the app regains focus/visibility.
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible' && swRegistration) {
+                swRegistration.update().catch(function () {});
+            }
+        });
+        window.addEventListener('focus', function () {
+            if (swRegistration) swRegistration.update().catch(function () {});
+        });
+
+        // No unsaved state on this page, so it's safe to reload the moment
+        // a new service worker takes control (e.g. after a fresh deploy).
+        var swRefreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (swRefreshing) return;
+            swRefreshing = true;
+            window.location.reload();
         });
     }
 </script>

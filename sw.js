@@ -1,4 +1,4 @@
-const CACHE_NAME = 'homedb-v232';
+const CACHE_NAME = 'homedb-v234';
 
 const PRECACHE_ASSETS = [
   './login.html',
@@ -6,7 +6,6 @@ const PRECACHE_ASSETS = [
   './containers.css',
   './containers.js',
   './apiClient.js',
-  './config.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -38,6 +37,21 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+
+  // config.js is CI/CD-controlled and environment-specific: always fetch fresh,
+  // falling back to cache only when offline, so deploys take effect immediately.
+  if (url.origin === self.location.origin && url.pathname.endsWith('/config.js')) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        if (response.ok) {
+          caches.open(CACHE_NAME)
+            .then(cache => cache.put(event.request, response.clone()));
+        }
+        return response;
+      }).catch(() => caches.match(event.request, { ignoreSearch: true }))
+    );
+    return;
+  }
 
   // API calls (cross-origin to API Gateway): network-first, silent offline fallback
   if (url.origin !== self.location.origin) {

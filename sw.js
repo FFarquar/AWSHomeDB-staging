@@ -1,4 +1,4 @@
-const CACHE_NAME = 'homedb-v234';
+const CACHE_NAME = 'homedb-v235';
 
 const PRECACHE_ASSETS = [
   './login.html',
@@ -6,6 +6,7 @@ const PRECACHE_ASSETS = [
   './containers.css',
   './containers.js',
   './apiClient.js',
+  './authKey.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
